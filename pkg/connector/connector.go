@@ -17,7 +17,7 @@ type Connector struct {
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
 	return []connectorbuilder.ResourceSyncer{
-		newUserBuilder(),
+		newUserBuilder(d.zendeskClient),
 	}
 }
 
@@ -38,10 +38,6 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
 // to be sure that they are valid.
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
-	err := d.zendeskClient.ListUsers(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return nil, nil
 }
 

@@ -2,8 +2,9 @@ package client
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
@@ -24,15 +25,37 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 	return zc, nil
 }
 
-func (c *ZendeskClient) ListUsers(ctx context.Context) error {
-	users, page, err := c.client.GetUsers(ctx, nil)
+func (c *ZendeskClient) ListUsers(ctx context.Context, pageToken int) ([]zendesk.User, string, error) {
+	var nextPageToken string
+	users, page, err := c.client.GetUsers(ctx, &zendesk.UserListOptions{
+		PageOptions: zendesk.PageOptions{
+			Page:    pageToken,
+			PerPage: 1,
+		},
+	})
 	if err != nil {
-		return err
+		return nil, "", err
 	}
-	for _, user := range users {
-		fmt.Println(user.Name)
-		fmt.Println(user.Email)
+
+	if page.NextPage != nil {
+		nextPageToken, err = parseNextPage(*page.NextPage)
+		if err != nil {
+			return nil, "", err
+		}
 	}
-	fmt.Println(page.Count)
-	return nil
+
+	return users, nextPageToken, err
+}
+
+func parseNextPage(u string) (string, error) {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "", err
+	}
+	q := parsed.Query()
+	nextPageToken := q.Get("page")
+	if nextPageToken == "" {
+		return "", errors.New("invalid page token")
+	}
+	return nextPageToken, nil
 }
