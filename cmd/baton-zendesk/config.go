@@ -12,6 +12,7 @@ type config struct {
 	cli.BaseConfig `mapstructure:",squash"` // Puts the base config options in the same place as the connector options
 	Subdomain      string                   `mapstructure:"subdomain"`
 	ApiToken       string                   `mapstructure:"api-token"`
+	Email          string                   `mapstructure:"email"`
 }
 
 // validateConfig is run after the configuration is loaded, and should return an error if it isn't valid.
@@ -21,6 +22,9 @@ func validateConfig(ctx context.Context, cfg *config) error {
 	}
 	if cfg.ApiToken == "" {
 		return errors.New("Api-Token is required")
+	}
+	if cfg.Email == "" {
+		return errors.New("Email is required")
 	}
 	return nil
 }

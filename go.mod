@@ -8,6 +8,8 @@ require (
 	go.uber.org/zap v1.26.0
 )
 
+require github.com/google/go-querystring v1.1.0 // indirect
+
 require (
 	filippo.io/age v1.1.1 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
@@ -49,6 +51,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/nukosuke/go-zendesk v0.17.0
 	github.com/pelletier/go-toml/v2 v2.1.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
 	github.com/pquerna/xjwt v0.2.0 // indirect

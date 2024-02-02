@@ -29,6 +29,7 @@ func main() {
 	cmd.Version = version
 	cmd.PersistentFlags().String("subdomain", "", "The Zendesk subdomain. ($BATON_SUBDOMAIN)")
 	cmd.PersistentFlags().String("api-token", "", "The Zendesk apitoken. ($BATON_API_TOKEN)")
+	cmd.PersistentFlags().String("email", "", "The Zendesk email. ($BATON_EMAIL)")
 
 	err = cmd.Execute()
 	if err != nil {
@@ -40,7 +41,7 @@ func main() {
 func getConnector(ctx context.Context, cfg *config) (types.ConnectorServer, error) {
 	l := ctxzap.Extract(ctx)
 
-	cb, err := connector.New(ctx)
+	cb, err := connector.New(ctx, cfg.Subdomain, cfg.Email, cfg.ApiToken)
 	if err != nil {
 		l.Error("error creating connector", zap.Error(err))
 		return nil, err
