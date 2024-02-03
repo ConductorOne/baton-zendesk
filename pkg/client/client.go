@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 
+	_ "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
@@ -29,8 +30,7 @@ func (c *ZendeskClient) ListUsers(ctx context.Context, pageToken int) ([]zendesk
 	var nextPageToken string
 	users, page, err := c.client.GetUsers(ctx, &zendesk.UserListOptions{
 		PageOptions: zendesk.PageOptions{
-			Page:    pageToken,
-			PerPage: 1,
+			Page: pageToken,
 		},
 	})
 	if err != nil {

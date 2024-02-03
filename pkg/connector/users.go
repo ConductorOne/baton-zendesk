@@ -2,13 +2,14 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
+	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
 type userBuilder struct {
@@ -25,6 +26,7 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	var (
 		pageToken int
 		err       error
+		ret       []*v2.Resource
 	)
 	if pToken.Token != "" {
 		pageToken, err = strconv.Atoi(pToken.Token)
@@ -38,11 +40,15 @@ func (o *userBuilder) List(ctx context.Context, parentResourceID *v2.ResourceId,
 	}
 
 	for _, user := range users {
-		fmt.Println(user.Name)
-		fmt.Println(user.Email)
+		res, err := o.userResource(user)
+		if err != nil {
+			return nil, "", nil, err
+		}
+
+		ret = append(ret, res)
 	}
 
-	return nil, nextPageToken, nil, nil
+	return ret, nextPageToken, nil, nil
 }
 
 // Entitlements always returns an empty slice for users.
@@ -59,4 +65,13 @@ func newUserBuilder(c *client.ZendeskClient) *userBuilder {
 	return &userBuilder{
 		client: c,
 	}
+}
+
+func (o *userBuilder) userResource(user zendesk.User) (*v2.Resource, error) {
+	resource, err := rs.NewUserResource(user.Name, userResourceType, user.ID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return resource, nil
 }
