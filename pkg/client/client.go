@@ -20,7 +20,10 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 	if err != nil {
 		return nil, err
 	}
-	client.SetSubdomain(subdomain)
+	err = client.SetSubdomain(subdomain)
+	if err != nil {
+		return nil, err
+	}
 	client.SetCredential(zendesk.NewAPITokenCredential(email, apiToken))
 	zc.client = client
 	return zc, nil
