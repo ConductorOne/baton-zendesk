@@ -27,9 +27,7 @@ func main() {
 	}
 
 	cmd.Version = version
-	cmd.PersistentFlags().String("subdomain", "", "The Zendesk subdomain. ($BATON_SUBDOMAIN)")
-	cmd.PersistentFlags().String("api-token", "", "The Zendesk apitoken. ($BATON_API_TOKEN)")
-	cmd.PersistentFlags().String("email", "", "The Zendesk email. ($BATON_EMAIL)")
+	cmdFlags(cmd)
 
 	err = cmd.Execute()
 	if err != nil {
