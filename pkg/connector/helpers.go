@@ -6,6 +6,8 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 func annotationsForUserResourceType() annotations.Annotations {
@@ -53,8 +55,8 @@ func convertPageToken(token string) (int, error) {
 	return strconv.Atoi(token)
 }
 
-// func titleCase(s string) string {
-// 	titleCaser := cases.Title(language.English)
+func titleCase(s string) string {
+	titleCaser := cases.Title(language.English)
 
-// 	return titleCaser.String(s)
-// }
+	return titleCaser.String(s)
+}
