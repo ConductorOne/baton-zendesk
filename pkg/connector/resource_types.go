@@ -26,4 +26,9 @@ var (
 		},
 		Annotations: annotationsForUserResourceType(),
 	}
+	resourceTypeOrg = &v2.ResourceType{
+		Id:          "org",
+		DisplayName: "Org",
+		Annotations: v1AnnotationsForResourceType("org"),
+	}
 )

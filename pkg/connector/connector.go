@@ -11,6 +11,7 @@ import (
 )
 
 type Connector struct {
+	orgs          []string
 	zendeskClient *client.ZendeskClient
 }
 
@@ -19,6 +20,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 	return []connectorbuilder.ResourceSyncer{
 		userBuilder(d.zendeskClient),
 		groupBuilder(d.zendeskClient),
+		orgBuilder(d.zendeskClient, d.orgs),
 	}
 }
 
