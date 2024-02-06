@@ -125,22 +125,17 @@ func (c *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 	var nextPageToken string
 	oID, err := strconv.ParseInt(orgID.Resource, 10, 64)
 	if err != nil {
-		return nil, zendesk.Page{}, err
+		return nil, "", err
 	}
 
 	users, page, err := c.client.GetOrganizationUsers(ctx, oID, nil)
 
 	if err != nil {
-		return nil, zendesk.Page{}, err
+		return nil, "", err
 	}
 
 	if page.NextPage != nil {
-		if page.NextPage != nil {
-			nextPageToken, err = parseNextPage(*page.NextPage)
-			if err != nil {
-				return nil, "", err
-			}
-		}, err = parseNextPage(*page.NextPage)
+		nextPageToken, err = parseNextPage(*page.NextPage)
 		if err != nil {
 			return nil, "", err
 		}
