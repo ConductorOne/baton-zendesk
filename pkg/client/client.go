@@ -121,7 +121,8 @@ func (c *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (s
 }
 
 // GetOrganizationUsers fetch organization users list.
-func (c *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, opts *zendesk.UserListOptions) ([]zendesk.User, zendesk.Page, error) {
+func (c *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, opts *zendesk.UserListOptions) ([]zendesk.User, string, error) {
+	var nextPageToken string
 	oID, err := strconv.ParseInt(orgID.Resource, 10, 64)
 	if err != nil {
 		return nil, zendesk.Page{}, err
@@ -133,12 +134,23 @@ func (c *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		return nil, zendesk.Page{}, err
 	}
 
-	return users, page, nil
+	if page.NextPage != nil {
+		if page.NextPage != nil {
+			nextPageToken, err = parseNextPage(*page.NextPage)
+			if err != nil {
+				return nil, "", err
+			}
+		}, err = parseNextPage(*page.NextPage)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	return users, nextPageToken, nil
 }
 
 // GetOrganizationMemberships fetch organization memberships.
-func (c *ZendeskClient) GetOrganizationMemberships(ctx context.Context,
-	opts *zendesk.OrganizationMembershipListOptions) ([]zendesk.OrganizationMembership, zendesk.Page, error) {
+func (c *ZendeskClient) GetOrganizationMemberships(ctx context.Context, opts *zendesk.OrganizationMembershipListOptions) ([]zendesk.OrganizationMembership, zendesk.Page, error) {
 	orgMemberships, _, err := c.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
 		PageOptions:    zendesk.PageOptions{},
 		OrganizationID: opts.OrganizationID,
@@ -151,13 +163,21 @@ func (c *ZendeskClient) GetOrganizationMemberships(ctx context.Context,
 }
 
 // GetOrganizations fetch organization list.
-func (c *ZendeskClient) GetOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, zendesk.Page, error) {
-	orgs, _, err := c.client.GetOrganizations(ctx, &zendesk.OrganizationListOptions{})
+func (c *ZendeskClient) GetOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, string, error) {
+	orgs, page, err := c.client.GetOrganizations(ctx, &zendesk.OrganizationListOptions{})
+	var nextPageToken string
 	if err != nil {
-		return nil, zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
 
-	return orgs, zendesk.Page{}, err
+	if page.NextPage != nil {
+		nextPageToken, err = parseNextPage(*page.NextPage)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	return orgs, nextPageToken, err
 }
 
 // GetRole get an existing user role.

@@ -26,6 +26,8 @@ func (g *groupResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
 	return g.resourceType
 }
 
+// List returns all the groups from the database as resource objects.
+// Groups include a GroupTrait because they are the 'shape' of a standard group.
 func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var (
 		pageToken int
@@ -77,10 +79,12 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 	if err != nil {
 		return nil, "", nil, err
 	}
-	groupMemberships, _, err := g.client.GetGroupMemberships(ctx, int64(groupId))
+
+	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId))
 	if err != nil {
 		return nil, "", nil, err
 	}
+
 	for _, user := range groupMemberships {
 		userAccountDetail, err := g.client.GetUser(ctx, user.UserID)
 		if err != nil {
@@ -96,7 +100,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		rv = append(rv, grant)
 	}
 
-	return rv, "", nil, nil
+	return rv, nextPageToken, nil, nil
 }
 
 func groupBuilder(c *client.ZendeskClient) *groupResourceType {

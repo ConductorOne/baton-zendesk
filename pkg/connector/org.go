@@ -39,8 +39,8 @@ func (o *orgResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return o.resourceType
 }
 
-func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId,
-	pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+	var ret []*v2.Resource
 	_, page, err := parsePageToken(pToken.Token, &v2.ResourceId{ResourceType: resourceTypeOrg.Id})
 	if err != nil {
 		return nil, "", nil, err
@@ -53,30 +53,34 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 		},
 	}
 
-	orgs, _, err := o.client.GetOrganizations(ctx, opts)
+	orgs, nextPageToken, err := o.client.GetOrganizations(ctx, opts)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
-	var ret []*v2.Resource
+
 	for _, org := range orgs {
 		if _, ok := o.orgs[org.Name]; !ok && len(o.orgs) > 0 {
 			continue
 		}
+
 		memberships, _, err := o.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
 			OrganizationID: org.ID,
 		})
 		if err != nil {
 			return nil, "", nil, err
 		}
+
 		for _, membership := range memberships {
 			membershipRole, _, err := o.client.GetRole(ctx, membership)
 			if err != nil {
 				return nil, "", nil, fmt.Errorf("zendesk-connector: failed to get role member: %w", err)
 			}
+
 			// Only sync orgs that we are an admin for
 			if strings.ToLower(membershipRole) != orgRoleAdmin {
 				continue
 			}
+
 			orgResource, err := rs.NewResource(
 				org.Name,
 				resourceTypeOrg,
@@ -96,11 +100,10 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 		}
 	}
 
-	return ret, "", nil, nil
+	return ret, nextPageToken, nil, nil
 }
 
-func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token,
-) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
 		rv = append(rv, entitlement.NewPermissionEntitlement(resource, level,
@@ -116,8 +119,7 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 	return rv, "", nil, nil
 }
 
-func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource,
-	pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var rv []*v2.Grant
 	_, page, err := parsePageToken(pToken.Token, resource.Id)
 	if err != nil {
@@ -130,15 +132,17 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource,
 			PerPage: pToken.Size,
 		},
 	}
-	users, _, err := o.client.GetOrganizationUsers(ctx, resource.Id, &opts)
+	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, &opts)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to list org members: %w", err)
 	}
+
 	for _, user := range users {
 		ur, err := o.userResource(user)
 		if err != nil {
 			return nil, "", nil, err
 		}
+
 		roleName := strings.ToLower(user.Role)
 		switch roleName {
 		case orgRoleAdmin, orgRoleMember, orgRoleAgent:
@@ -153,7 +157,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource,
 		}
 	}
 
-	return rv, "", nil, nil
+	return rv, nextPageToken, nil, nil
 }
 
 func orgBuilder(client *client.ZendeskClient, orgs []string) *orgResourceType {
