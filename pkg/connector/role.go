@@ -106,8 +106,10 @@ func (o *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 // GetAccounts returns all zendesk accounts.
 func (c *roleResourceType) GetAccounts(ctx context.Context) ([]zendesk.User, []zendesk.Group, string, error) {
-	var userAccounts []zendesk.User
-	var groupsAccounts []zendesk.Group
+	var (
+		userAccounts   []zendesk.User
+		groupsAccounts []zendesk.Group
+	)
 	users, nextPageToken, err := c.client.ListUsers(ctx, 0)
 	if err != nil {
 		return nil, nil, "", err
@@ -169,8 +171,11 @@ func groupResource(group *zendesk.Group, parentResourceID *v2.ResourceId) (*v2.R
 
 // Create a new connector resource for a Jamf user account.
 func userAccountResource(account *zendesk.User, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	var (
+		firstName, lastName string
+		userStatus          v2.UserTrait_Status_Status
+	)
 	names := strings.SplitN(account.Name, " ", 2)
-	var firstName, lastName string
 
 	switch len(names) {
 	case 1:
@@ -186,9 +191,6 @@ func userAccountResource(account *zendesk.User, parentResourceID *v2.ResourceId)
 		"login":      account.Email,
 		"user_id":    fmt.Sprintf("account:%d", account.ID),
 	}
-
-	var userStatus v2.UserTrait_Status_Status
-	// if account.Enabled == "Enabled" {
 	if account.Active {
 		userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	} else {
