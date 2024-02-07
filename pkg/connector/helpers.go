@@ -1,11 +1,13 @@
 package connector
 
 import (
+	"fmt"
 	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -59,4 +61,14 @@ func titleCase(s string) string {
 	titleCaser := cases.Title(language.English)
 
 	return titleCaser.String(s)
+}
+
+// Populate entitlement options for zendesk resource.
+func PopulateOptions(displayName, permission, resource string) []ent.EntitlementOption {
+	options := []ent.EntitlementOption{
+		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
+		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
+		ent.WithDisplayName(fmt.Sprintf("%s %s %s", displayName, resource, permission)),
+	}
+	return options
 }

@@ -20,7 +20,7 @@ type roleResourceType struct {
 	client       *client.ZendeskClient
 }
 
-var privileges = []string{
+var roles = []string{
 	"Light agent",
 	"Contributor",
 	"Billing admin",
@@ -35,7 +35,7 @@ func (o *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 // Roles include a RoleTrait because they are the 'shape' of a standard group.
 func (o *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, token *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
-	for _, privilege := range privileges {
+	for _, privilege := range roles {
 		rr, err := roleResource(ctx, privilege, parentId)
 		if err != nil {
 			return nil, "", nil, err
@@ -49,14 +49,13 @@ func (o *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 func (o *roleResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
 
-	privilegeOptions := []ent.EntitlementOption{
-		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
-		ent.WithDescription(fmt.Sprintf("Privilege set of %s", resource.DisplayName)),
-		ent.WithDisplayName(fmt.Sprintf("%s privilege set %s", resource.DisplayName, memberEntitlement)),
-	}
+	assigmentOptions := PopulateOptions(resource.DisplayName, memberEntitlement, resource.Id.Resource)
+	assignmentEn := ent.NewAssignmentEntitlement(resource, memberEntitlement, assigmentOptions...)
 
-	priviledgesEn := ent.NewPermissionEntitlement(resource, memberEntitlement, privilegeOptions...)
-	rv = append(rv, priviledgesEn)
+	permissionOptions := PopulateOptions(resource.DisplayName, adminEntitlement, resource.Id.Resource)
+	permissionEn := ent.NewPermissionEntitlement(resource, adminEntitlement, permissionOptions...)
+
+	rv = append(rv, assignmentEn, permissionEn)
 
 	return rv, "", nil, nil
 }
@@ -88,7 +87,7 @@ func (o *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 			}
 		}
 	}
-	// rv = append(rv, rvGroups...)
+
 	for _, userAccount := range userAccounts {
 		userAccountCopy := userAccount
 		gr, err := userAccountResource(&userAccountCopy, resource.Id)

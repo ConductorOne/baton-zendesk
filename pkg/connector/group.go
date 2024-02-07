@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -15,7 +14,10 @@ import (
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
-const memberEntitlement = "member"
+const (
+	memberEntitlement = "member"
+	adminEntitlement  = "admin"
+)
 
 type groupResourceType struct {
 	resourceType *v2.ResourceType
@@ -47,7 +49,7 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, p
 	}
 
 	for _, group := range groups {
-		res, err := g.groupResource(group)
+		res, err := g.groupResource(group, parentId)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -61,14 +63,13 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, p
 func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
 
-	assigmentOptions := []ent.EntitlementOption{
-		ent.WithGrantableTo(resourceTypeUser),
-		ent.WithDescription(fmt.Sprintf("Member of %s Group", resource.DisplayName)),
-		ent.WithDisplayName(fmt.Sprintf("%s Group %s", resource.DisplayName, memberEntitlement)),
-	}
+	assigmentOptions := PopulateOptions(resource.DisplayName, memberEntitlement, resource.Id.Resource)
+	assignmentEn := ent.NewAssignmentEntitlement(resource, memberEntitlement, assigmentOptions...)
 
-	en := ent.NewAssignmentEntitlement(resource, memberEntitlement, assigmentOptions...)
-	rv = append(rv, en)
+	permissionOptions := PopulateOptions(resource.DisplayName, adminEntitlement, resource.Id.Resource)
+	permissionEn := ent.NewPermissionEntitlement(resource, adminEntitlement, permissionOptions...)
+
+	rv = append(rv, assignmentEn, permissionEn)
 
 	return rv, "", nil, nil
 }
@@ -96,8 +97,13 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 			return nil, "", nil, err
 		}
 
-		grant := grant.NewGrant(resource, memberEntitlement, ur.Id)
-		rv = append(rv, grant)
+		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
+		rv = append(rv, membershipGrant)
+
+		if userAccountDetail.Role == adminEntitlement {
+			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
+			rv = append(rv, adminsGrant)
+		}
 	}
 
 	return rv, nextPageToken, nil, nil
@@ -110,13 +116,25 @@ func groupBuilder(c *client.ZendeskClient) *groupResourceType {
 	}
 }
 
-func (o *groupResourceType) groupResource(group zendesk.Group) (*v2.Resource, error) {
-	resource, err := rs.NewGroupResource(group.Name, resourceTypeGroup, group.ID, nil)
+// Create a new connector resource for a Zenddesk group.
+func (o *groupResourceType) groupResource(group zendesk.Group, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	profile := map[string]interface{}{
+		"group_id":   group.ID,
+		"group_name": group.Name,
+	}
+	groupTraitOptions := []rs.GroupTraitOption{rs.WithGroupProfile(profile)}
+	ret, err := rs.NewGroupResource(
+		group.Name,
+		resourceTypeGroup,
+		group.ID,
+		groupTraitOptions,
+		rs.WithParentResourceID(parentResourceID),
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	return resource, nil
+	return ret, nil
 }
 
 func (o *groupResourceType) userAccountResource(user zendesk.User) (*v2.Resource, error) {
