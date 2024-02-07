@@ -76,6 +76,24 @@ func (c *ZendeskClient) ListGroups(ctx context.Context, pageToken int) ([]zendes
 	return groups, nextPageToken, err
 }
 
+// ListOrganizations fetch organization list.
+func (c *ZendeskClient) ListOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, string, error) {
+	var nextPageToken string
+	orgs, page, err := c.client.GetOrganizations(ctx, &zendesk.OrganizationListOptions{})
+	if err != nil {
+		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+	}
+
+	if page.NextPage != nil {
+		nextPageToken, err = parseNextPage(*page.NextPage)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	return orgs, nextPageToken, err
+}
+
 // GetGroupMemberships gets the memberships of the specified group.
 func (c *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64) ([]zendesk.GroupMembership, string, error) {
 	var nextPageToken string
@@ -165,24 +183,6 @@ func (c *ZendeskClient) GetOrganizationMemberships(ctx context.Context, opts *ze
 	}
 
 	return orgMemberships, zendesk.Page{}, nil
-}
-
-// GetOrganizations fetch organization list.
-func (c *ZendeskClient) GetOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, string, error) {
-	orgs, page, err := c.client.GetOrganizations(ctx, &zendesk.OrganizationListOptions{})
-	var nextPageToken string
-	if err != nil {
-		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
-	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	return orgs, nextPageToken, err
 }
 
 // GetRole get an existing user role.

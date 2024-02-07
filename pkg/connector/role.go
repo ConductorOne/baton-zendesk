@@ -31,6 +31,8 @@ func (o *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return o.resourceType
 }
 
+// List returns all the roles from the database as resource objects.
+// Roles include a RoleTrait because they are the 'shape' of a standard group.
 func (o *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, token *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
 	for _, privilege := range privileges {
@@ -48,7 +50,7 @@ func (o *roleResourceType) Entitlements(_ context.Context, resource *v2.Resource
 	var rv []*v2.Entitlement
 
 	privilegeOptions := []ent.EntitlementOption{
-		ent.WithGrantableTo(resourceTypeUserAccount, resourceTypeGroup),
+		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
 		ent.WithDescription(fmt.Sprintf("Privilege set of %s", resource.DisplayName)),
 		ent.WithDisplayName(fmt.Sprintf("%s privilege set %s", resource.DisplayName, memberEntitlement)),
 	}
@@ -205,7 +207,7 @@ func userAccountResource(account *zendesk.User, parentResourceID *v2.ResourceId)
 
 	ret, err := resource.NewUserResource(
 		account.Name,
-		resourceTypeUserAccount,
+		resourceTypeUser,
 		account.ID,
 		userTraitOptions,
 		resource.WithParentResourceID(parentResourceID),

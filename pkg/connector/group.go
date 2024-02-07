@@ -62,7 +62,7 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 	var rv []*v2.Entitlement
 
 	assigmentOptions := []ent.EntitlementOption{
-		ent.WithGrantableTo(resourceTypeUserAccount),
+		ent.WithGrantableTo(resourceTypeUser),
 		ent.WithDescription(fmt.Sprintf("Member of %s Group", resource.DisplayName)),
 		ent.WithDisplayName(fmt.Sprintf("%s Group %s", resource.DisplayName, memberEntitlement)),
 	}

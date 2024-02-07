@@ -18,14 +18,6 @@ var (
 			v2.ResourceType_TRAIT_GROUP,
 		},
 	}
-	resourceTypeUserAccount = &v2.ResourceType{
-		Id:          "userAccount",
-		DisplayName: "User Account",
-		Traits: []v2.ResourceType_Trait{
-			v2.ResourceType_TRAIT_USER,
-		},
-		Annotations: annotationsForUserResourceType(),
-	}
 	resourceTypeOrg = &v2.ResourceType{
 		Id:          "org",
 		DisplayName: "Org",

@@ -39,6 +39,7 @@ func (o *orgResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return o.resourceType
 }
 
+// List returns all the organizations from the database as resource objects.
 func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var ret []*v2.Resource
 	_, page, err := parsePageToken(pToken.Token, &v2.ResourceId{ResourceType: resourceTypeOrg.Id})
@@ -53,7 +54,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 		},
 	}
 
-	orgs, nextPageToken, err := o.client.GetOrganizations(ctx, opts)
+	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
