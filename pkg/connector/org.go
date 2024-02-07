@@ -160,7 +160,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 	return rv, nextPageToken, nil, nil
 }
 
-func orgBuilder(client *client.ZendeskClient, orgs []string) *orgResourceType {
+func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
 	orgMap := make(map[string]struct{})
 
 	for _, o := range orgs {
@@ -170,7 +170,7 @@ func orgBuilder(client *client.ZendeskClient, orgs []string) *orgResourceType {
 	return &orgResourceType{
 		resourceType: resourceTypeOrg,
 		orgs:         orgMap,
-		client:       client,
+		client:       c,
 	}
 }
 

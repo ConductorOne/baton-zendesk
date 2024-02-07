@@ -105,6 +105,16 @@ func (c *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User
 	return user, err
 }
 
+// GetGroupDetails get an existing group.
+func (c *ZendeskClient) GetGroupDetails(ctx context.Context, groupID int64) (zendesk.Group, error) {
+	group, err := c.client.GetGroup(ctx, groupID)
+	if err != nil {
+		return zendesk.Group{}, err
+	}
+
+	return group, err
+}
+
 // GetOrgName get an existing organization name.
 func (c *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (string, error) {
 	oID, err := strconv.ParseInt(orgID.Resource, 10, 64)
@@ -188,6 +198,16 @@ func (c *ZendeskClient) GetRole(ctx context.Context, membership zendesk.Organiza
 	}
 
 	return "", zendesk.Page{}, err
+}
+
+// GetCustomRoles fetch CustomRoles list.
+func (c *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
+	customRole, err := c.client.GetCustomRoles(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to fetch customroles: %w", err)
+	}
+
+	return customRole, nil
 }
 
 func parseNextPage(u string) (string, error) {
