@@ -24,6 +24,9 @@ func validateConfig(ctx context.Context, cfg *config) error {
 	if cfg.ApiToken == "" {
 		return errors.New("api-Token is required")
 	}
+	if cfg.Email == "" {
+		return errors.New("email is required")
+	}
 
 	return nil
 }
