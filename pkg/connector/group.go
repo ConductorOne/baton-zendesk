@@ -148,10 +148,10 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
 
-	l.Warn("Membership has been created..\nID:",
+	l.Warn("Membership has been created..",
 		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
-		zap.String("UserID", string(rune(membership.UserID))),
-		zap.String("GroupID", string(rune(membership.GroupID))),
+		zap.String("UserID", fmt.Sprintf("%d", membership.UserID)),
+		zap.String("GroupID", fmt.Sprintf("%d", membership.GroupID)),
 		zap.String("CreatedAt", membership.CreatedAt.String()),
 	)
 
