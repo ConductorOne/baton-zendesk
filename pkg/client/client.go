@@ -1,12 +1,10 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -344,48 +342,23 @@ func (c *ZendeskClient) GetTeamResource(team *zendesk.User, resourceTypeTeam *v2
 	return ret, nil
 }
 
-func (c *ZendeskClient) CreateGroupMemberchip(ctx context.Context, userID int64, groupID int64) (zendesk.GroupMembership, error) {
-	var result struct {
+func (c *ZendeskClient) CreateGroupMemberchip(ctx context.Context, groupMemberships zendesk.GroupMembership) (zendesk.GroupMembership, error) {
+	var data, result struct {
 		GroupMemberships zendesk.GroupMembership `json:"group_membership"`
 	}
-	subdomain := "simerahelp"
-	token := "xxxxx"
-	baseURL := fmt.Sprintf("https://%s.zendesk.com/api/v2/group_memberships.json", subdomain)
-	// JSON body
-	body := []byte(fmt.Sprintf(`{"group_membership":{"user_id" : %d,"group_id" : %d}}`, userID, groupID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(body))
+
+	data.GroupMemberships = groupMemberships
+	body, err := c.client.Post(ctx, "/group_memberships.json", data)
 	if err != nil {
 		return zendesk.GroupMembership{}, err
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", token))
-	cli := &http.Client{}
-	resp, err := cli.Do(req)
+	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return zendesk.GroupMembership{}, err
 	}
 
-	defer resp.Body.Close()
-	if !(resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated) {
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return zendesk.GroupMembership{}, err
-		}
-
-		return zendesk.GroupMembership{}, errors.New(string(body))
-	}
-
-	if resp.StatusCode == http.StatusCreated {
-		err = json.NewDecoder(resp.Body).Decode(&result)
-		if err != nil {
-			return zendesk.GroupMembership{}, err
-		}
-
-		return result.GroupMemberships, nil
-	}
-
-	return zendesk.GroupMembership{}, nil
+	return result.GroupMemberships, nil
 }
 
 func parseNextPage(u string) (string, error) {

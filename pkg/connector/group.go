@@ -12,6 +12,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
 )
 
@@ -143,7 +144,11 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		return nil, err
 	}
 
-	membership, err := g.client.CreateGroupMemberchip(ctx, userID, groupID)
+	groupMembershipOptions := zendesk.GroupMembership{
+		UserID:  userID,
+		GroupID: groupID,
+	}
+	membership, err := g.client.CreateGroupMemberchip(ctx, groupMembershipOptions)
 	if err != nil {
 		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
