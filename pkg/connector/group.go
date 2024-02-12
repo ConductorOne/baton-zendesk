@@ -148,7 +148,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		UserID:  userID,
 		GroupID: groupID,
 	}
-	membership, err := g.client.CreateGroupMemberchip(ctx, groupMembershipOptions)
+	membership, err := g.client.CreateGroupMembership(ctx, groupMembershipOptions)
 	if err != nil {
 		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
@@ -164,6 +164,43 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 }
 
 func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	entitlement := grant.Entitlement
+	principal := grant.Principal
+
+	if principal.Id.ResourceType != resourceTypeUser.Id {
+		l.Warn(
+			"zendesk-connector: only team members can have group membership revoked",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("zendesk-connector: only team members can have group membership revoked")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	groupID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	groupMembershipOptions := zendesk.GroupMembership{
+		UserID:  userID,
+		GroupID: groupID,
+	}
+	groupMembershipID, err := g.client.RemoveGroupMembershipByID(ctx, groupMembershipOptions)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to revoke team member: %s", err.Error())
+	}
+
+	l.Warn("Membership has been revoked..",
+		zap.String("groupMembershipID", groupMembershipID),
+	)
+
 	return nil, nil
 }
 
