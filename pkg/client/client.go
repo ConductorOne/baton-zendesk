@@ -348,7 +348,9 @@ func (c *ZendeskClient) CreateGroupMemberchip(ctx context.Context, userID int64,
 	var result struct {
 		GroupMemberships zendesk.GroupMembership `json:"group_membership"`
 	}
-	baseURL := fmt.Sprintf("https://%s.zendesk.com/api/v2/group_memberships.json", "simerahelp")
+	subdomain := "simerahelp"
+	token := "xxxxx"
+	baseURL := fmt.Sprintf("https://%s.zendesk.com/api/v2/group_memberships.json", subdomain)
 	// JSON body
 	body := []byte(fmt.Sprintf(`{"group_membership":{"user_id" : %d,"group_id" : %d}}`, userID, groupID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(body))
@@ -357,7 +359,7 @@ func (c *ZendeskClient) CreateGroupMemberchip(ctx context.Context, userID int64,
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Add("Authorization", "Basic bWlndWVsLmFuZ2VsLmNoYXZlei5tYXJ0aW5lekBnbWFpbC5jb20vdG9rZW46UmtuUHZHWXFiUGE1dmZhSHBVNjBXa0dqVnhhcFNxZGExajFiRW9Hcw==")
+	req.Header.Add("Authorization", fmt.Sprintf("Basic %s", token))
 	cli := &http.Client{}
 	resp, err := cli.Do(req)
 	if err != nil {
