@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -9,9 +10,9 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
-	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
-	"github.com/nukosuke/go-zendesk/zendesk"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"go.uber.org/zap"
 )
 
 const (
@@ -24,7 +25,7 @@ type groupResourceType struct {
 	client       *client.ZendeskClient
 }
 
-func (g *groupResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
+func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return g.resourceType
 }
 
@@ -49,7 +50,7 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, p
 	}
 
 	for _, group := range groups {
-		res, err := g.groupResource(group, parentId)
+		res, err := g.client.GetGroupResource(group, resourceTypeGroup, parentId)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -92,7 +93,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 			return nil, "", nil, err
 		}
 
-		ur, err := g.userAccountResource(userAccountDetail)
+		ur, err := g.client.GetUserResource(userAccountDetail, resourceTypeUser)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -109,39 +110,61 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 	return rv, nextPageToken, nil, nil
 }
 
+func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+	if principal.Id.ResourceType != resourceTypeUser.Id {
+		l.Warn(
+			"zendesk-connector: only team members can be granted group membership",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("zendesk-connector: only users can be granted team membership")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := g.client.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.Role == "end-user" {
+		l.Warn("user must be a team member",
+			zap.String("user", fmt.Sprintf("%d", user.ID)),
+			zap.String("user.Role", user.Role),
+		)
+		return nil, fmt.Errorf("user must be a team member")
+	}
+
+	groupID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	membership, err := g.client.CreateGroupMemberchip(ctx, userID, groupID)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+	}
+
+	l.Warn("Membership has been created..\nID:",
+		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
+		zap.String("UserID", string(rune(membership.UserID))),
+		zap.String("GroupID", string(rune(membership.GroupID))),
+		zap.String("CreatedAt", membership.CreatedAt.String()),
+	)
+
+	return nil, nil
+}
+
+func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	return nil, nil
+}
+
 func groupBuilder(c *client.ZendeskClient) *groupResourceType {
 	return &groupResourceType{
 		resourceType: resourceTypeGroup,
 		client:       c,
 	}
-}
-
-// Create a new connector resource for a Zenddesk group.
-func (o *groupResourceType) groupResource(group zendesk.Group, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	profile := map[string]interface{}{
-		"group_id":   group.ID,
-		"group_name": group.Name,
-	}
-	groupTraitOptions := []rs.GroupTraitOption{rs.WithGroupProfile(profile)}
-	ret, err := rs.NewGroupResource(
-		group.Name,
-		resourceTypeGroup,
-		group.ID,
-		groupTraitOptions,
-		rs.WithParentResourceID(parentResourceID),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret, nil
-}
-
-func (o *groupResourceType) userAccountResource(user zendesk.User) (*v2.Resource, error) {
-	resource, err := rs.NewUserResource(user.Name, resourceTypeUser, user.ID, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return resource, nil
 }

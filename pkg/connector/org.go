@@ -8,7 +8,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
-	"github.com/conductorone/baton-sdk/pkg/types/entitlement"
+	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
@@ -107,13 +107,13 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
-		rv = append(rv, entitlement.NewPermissionEntitlement(resource, level,
-			entitlement.WithDisplayName(fmt.Sprintf("%s Org %s", resource.DisplayName, titleCase(level))),
-			entitlement.WithDescription(fmt.Sprintf("Access to %s org in Github", resource.DisplayName)),
-			entitlement.WithAnnotation(&v2.V1Identifier{
+		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
+			ent.WithDisplayName(fmt.Sprintf("%s Org %s", resource.DisplayName, titleCase(level))),
+			ent.WithDescription(fmt.Sprintf("Access to %s org in Zendesk", resource.DisplayName)),
+			ent.WithAnnotation(&v2.V1Identifier{
 				Id: fmt.Sprintf("org:%s:role:%s", resource.Id.Resource, level),
 			}),
-			entitlement.WithGrantableTo(resourceTypeUser),
+			ent.WithGrantableTo(resourceTypeUser),
 		))
 	}
 
@@ -139,7 +139,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 	}
 
 	for _, user := range users {
-		ur, err := o.userResource(user)
+		ur, err := o.client.GetUserResource(user, resourceTypeUser)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -161,6 +161,14 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 	return rv, nextPageToken, nil, nil
 }
 
+func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	return nil, nil
+}
+
+func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	return nil, nil
+}
+
 func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
 	orgMap := make(map[string]struct{})
 
@@ -173,13 +181,4 @@ func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
 		orgs:         orgMap,
 		client:       c,
 	}
-}
-
-func (o *orgResourceType) userResource(user zendesk.User) (*v2.Resource, error) {
-	resource, err := rs.NewUserResource(user.Name, resourceTypeUser, user.ID, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return resource, nil
 }

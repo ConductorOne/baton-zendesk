@@ -26,7 +26,7 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
 ## brew
 
 ```
-brew install conductorone/baton/baton conductorone/baton/baton-box
+brew install conductorone/baton/baton conductorone/baton/baton-zendesk
 baton-zendesk
 baton resources
 ```

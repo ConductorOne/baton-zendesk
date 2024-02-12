@@ -7,9 +7,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
-	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
-	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
 type userResourceType struct {
@@ -43,7 +41,7 @@ func (o *userResourceType) List(ctx context.Context, parentResourceID *v2.Resour
 	}
 
 	for _, user := range users {
-		res, err := o.userResource(user)
+		res, err := o.client.GetUserResource(user, resourceTypeUser)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -71,11 +69,10 @@ func userBuilder(c *client.ZendeskClient) *userResourceType {
 	}
 }
 
-func (o *userResourceType) userResource(user zendesk.User) (*v2.Resource, error) {
-	resource, err := rs.NewUserResource(user.Name, resourceTypeUser, user.ID, nil)
-	if err != nil {
-		return nil, err
-	}
+func (o *userResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	return nil, nil
+}
 
-	return resource, nil
+func (o *userResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	return nil, nil
 }

@@ -66,9 +66,9 @@ func titleCase(s string) string {
 // Populate entitlement options for zendesk resource.
 func PopulateOptions(displayName, permission, resource string) []ent.EntitlementOption {
 	options := []ent.EntitlementOption{
-		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
-		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
 		ent.WithDisplayName(fmt.Sprintf("%s %s %s", displayName, resource, permission)),
+		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
+		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
 	}
 	return options
 }

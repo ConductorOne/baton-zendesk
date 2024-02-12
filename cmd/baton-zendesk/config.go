@@ -14,6 +14,7 @@ type config struct {
 	Subdomain      string                   `mapstructure:"subdomain"`
 	ApiToken       string                   `mapstructure:"api-token"`
 	Email          string                   `mapstructure:"email"`
+	Orgs           []string                 `mapstructure:"orgs"`
 }
 
 // validateConfig is run after the configuration is loaded, and should return an error if it isn't valid.
@@ -36,4 +37,5 @@ func cmdFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().String("subdomain", "", "The Zendesk subdomain. ($BATON_SUBDOMAIN)")
 	cmd.PersistentFlags().String("api-token", "", "The Zendesk apitoken. ($BATON_API_TOKEN)")
 	cmd.PersistentFlags().String("email", "", "The Zendesk email. ($BATON_EMAIL)")
+	cmd.PersistentFlags().StringSlice("orgs", []string{}, "Limit syncing to specific organizations. ($BATON_ORGS)")
 }

@@ -1,15 +1,19 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
-	_ "github.com/conductorone/baton-sdk/pkg/types/resource"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
@@ -94,7 +98,7 @@ func (c *ZendeskClient) ListOrganizations(ctx context.Context, opts *zendesk.Org
 	return orgs, nextPageToken, err
 }
 
-// GetGroupMemberships gets the memberships of the specified group.
+// GetGroupMemberships get the memberships of the specified group.
 func (c *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64) ([]zendesk.GroupMembership, string, error) {
 	var nextPageToken string
 	groupMemberships, page, err := c.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
@@ -208,6 +212,178 @@ func (c *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 	}
 
 	return customRole, nil
+}
+
+// GetUserResource gets a new connector resource for a Zenddesk group.
+func (c *ZendeskClient) GetUserResource(user zendesk.User, resourceTypeUser *v2.ResourceType) (*v2.Resource, error) {
+	resource, err := rs.NewUserResource(user.Name, resourceTypeUser, user.ID, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return resource, nil
+}
+
+// GetUserAccountResource create a new connector resource for a Jamf user account.
+func (c *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTypeUser *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	var (
+		firstName, lastName string
+		userStatus          v2.UserTrait_Status_Status
+	)
+	names := strings.SplitN(account.Name, " ", 2)
+
+	switch len(names) {
+	case 1:
+		firstName = names[0]
+	case 2:
+		firstName = names[0]
+		lastName = names[1]
+	}
+
+	profile := map[string]interface{}{
+		"user_id":    fmt.Sprintf("account:%d", account.ID),
+		"first_name": firstName,
+		"last_name":  lastName,
+		"login":      account.Email,
+	}
+	if account.Active {
+		userStatus = v2.UserTrait_Status_STATUS_ENABLED
+	} else {
+		userStatus = v2.UserTrait_Status_STATUS_DISABLED
+	}
+
+	userTraitOptions := []rs.UserTraitOption{
+		rs.WithUserProfile(profile),
+		rs.WithEmail(account.Email, true),
+		rs.WithStatus(userStatus),
+	}
+
+	ret, err := rs.NewUserResource(
+		account.Name,
+		resourceTypeUser,
+		account.ID,
+		userTraitOptions,
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+// GetGroupResource gets a new connector resource for a Zenddesk group.
+func (c *ZendeskClient) GetGroupResource(group zendesk.Group, resourceTypeGroup *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	profile := map[string]interface{}{
+		"group_id":   group.ID,
+		"group_name": group.Name,
+	}
+	groupTraitOptions := []rs.GroupTraitOption{rs.WithGroupProfile(profile)}
+	ret, err := rs.NewGroupResource(
+		group.Name,
+		resourceTypeGroup,
+		group.ID,
+		groupTraitOptions,
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+// GetRoleResource create a new connector resource for a Zendesk role.
+func (c *ZendeskClient) GetRoleResource(ctx context.Context, resourceTypeRole *v2.ResourceType, role string, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	profile := map[string]interface{}{
+		"role_id":   role,
+		"role_name": role,
+	}
+
+	roleTraitOptions := []rs.RoleTraitOption{
+		rs.WithRoleProfile(profile),
+	}
+
+	ret, err := rs.NewRoleResource(
+		role,
+		resourceTypeRole,
+		role,
+		roleTraitOptions,
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+// teamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
+func (c *ZendeskClient) GetTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	profile := map[string]interface{}{
+		// // Store the org ID in the profile so that we can reference it when calculating grants
+		// "orgID": team.GetOrganization().GetID(),
+		"user_id":   team.ID,
+		"user_name": team.Name,
+	}
+
+	ret, err := rs.NewGroupResource(
+		team.Name,
+		resourceTypeTeam,
+		team.ID,
+		[]rs.GroupTraitOption{rs.WithGroupProfile(profile)},
+		rs.WithAnnotation(
+			&v2.V1Identifier{Id: fmt.Sprintf("team:%d", team.ID)},
+		),
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func (c *ZendeskClient) CreateGroupMemberchip(ctx context.Context, userID int64, groupID int64) (zendesk.GroupMembership, error) {
+	var result struct {
+		GroupMemberships zendesk.GroupMembership `json:"group_membership"`
+	}
+	baseURL := fmt.Sprintf("https://%s.zendesk.com/api/v2/group_memberships.json", "simerahelp")
+	// JSON body
+	body := []byte(fmt.Sprintf(`{"group_membership":{"user_id" : %d,"group_id" : %d}}`, userID, groupID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL, bytes.NewBuffer(body))
+	if err != nil {
+		return zendesk.GroupMembership{}, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Basic bWlndWVsLmFuZ2VsLmNoYXZlei5tYXJ0aW5lekBnbWFpbC5jb20vdG9rZW46UmtuUHZHWXFiUGE1dmZhSHBVNjBXa0dqVnhhcFNxZGExajFiRW9Hcw==")
+	cli := &http.Client{}
+	resp, err := cli.Do(req)
+	if err != nil {
+		return zendesk.GroupMembership{}, err
+	}
+
+	defer resp.Body.Close()
+	if !(resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated) {
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return zendesk.GroupMembership{}, err
+		}
+
+		return zendesk.GroupMembership{}, errors.New(string(body))
+	}
+
+	if resp.StatusCode == http.StatusCreated {
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		if err != nil {
+			return zendesk.GroupMembership{}, err
+		}
+
+		return result.GroupMemberships, nil
+	}
+
+	return zendesk.GroupMembership{}, nil
 }
 
 func parseNextPage(u string) (string, error) {
