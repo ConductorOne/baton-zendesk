@@ -451,16 +451,16 @@ func parseNextPage(u string) (string, error) {
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org
 // https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#create-membership
-func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts zendesk.OrganizationMembershipOptions) (zendesk.OrganizationMembership, error) {
+func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts zendesk.OrganizationMembership) (zendesk.OrganizationMembership, error) {
 	var data, result struct {
 		OrganizationMembership zendesk.OrganizationMembership `json:"organization_membership"`
 	}
 
-	data.OrganizationMembership = zendesk.OrganizationMembership{
-		UserID:         opts.UserID,
-		OrganizationID: opts.OrganizationID,
-	}
-
+	// data.OrganizationMembership = zendesk.OrganizationMembership{
+	// 	UserID:         opts.UserID,
+	// 	OrganizationID: opts.OrganizationID,
+	// }
+	data.OrganizationMembership = opts
 	body, err := z.client.Post(ctx, "/organization_memberships.json", data)
 
 	if err != nil {

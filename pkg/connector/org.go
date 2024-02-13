@@ -183,7 +183,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 		return nil, err
 	}
 
-	organizationMembership := zendesk.OrganizationMembershipOptions{
+	organizationMembership := zendesk.OrganizationMembership{
 		OrganizationID: organizationID,
 		UserID:         userID,
 	}
