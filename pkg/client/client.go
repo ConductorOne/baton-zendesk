@@ -383,6 +383,25 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 	return "", zendesk.Page{}, err
 }
 
+// GetOrganizationMembershipByUser get an existing organization membership.
+func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, zendesk.Page, error) {
+	organizations, nextPage, err := z.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
+		UserID:         organizationMemberships.UserID,
+		OrganizationID: organizationMemberships.OrganizationID,
+	})
+	if err != nil {
+		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch organizationmemberships: %w", err)
+	}
+
+	for _, organization := range organizations {
+		if organizationMemberships.UserID == organization.UserID {
+			return fmt.Sprintf("%d", organization.ID), nextPage, nil
+		}
+	}
+
+	return "", zendesk.Page{}, err
+}
+
 // RemoveGroupMembershipByID removes a user from a group, given a specified
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
@@ -400,6 +419,23 @@ func (z *ZendeskClient) RemoveGroupMembershipByID(ctx context.Context, groupMemb
 	return groupMembershipID, err
 }
 
+// RemoveOrganizationMembershipByID removes a user from an organization, given a specified
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships
+func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, error) {
+	organizationMembershipID, _, err := z.GetOrganizationMembershipByUser(ctx, organizationMemberships)
+	if err != nil {
+		return "", err
+	}
+
+	err = z.client.Delete(ctx, fmt.Sprintf("/organization_memberships/%s", organizationMembershipID))
+	if err != nil {
+		return "", err
+	}
+
+	return organizationMembershipID, err
+}
+
 func parseNextPage(u string) (string, error) {
 	parsed, err := url.Parse(u)
 	if err != nil {
@@ -411,4 +447,30 @@ func parseNextPage(u string) (string, error) {
 		return "", errors.New("invalid page token")
 	}
 	return nextPageToken, nil
+}
+
+// CreateOrganizationMembership creates an organization membership for an existing user and org
+// https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#create-membership
+func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts zendesk.OrganizationMembershipOptions) (zendesk.OrganizationMembership, error) {
+	var data, result struct {
+		OrganizationMembership zendesk.OrganizationMembership `json:"organization_membership"`
+	}
+
+	data.OrganizationMembership = zendesk.OrganizationMembership{
+		UserID:         opts.UserID,
+		OrganizationID: opts.OrganizationID,
+	}
+
+	body, err := z.client.Post(ctx, "/organization_memberships.json", data)
+
+	if err != nil {
+		return zendesk.OrganizationMembership{}, err
+	}
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return zendesk.OrganizationMembership{}, err
+	}
+
+	return result.OrganizationMembership, err
 }

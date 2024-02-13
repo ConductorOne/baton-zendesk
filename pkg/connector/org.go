@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -162,10 +163,83 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 }
 
 func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+	if principal.Id.ResourceType != resourceTypeUser.Id {
+		l.Warn(
+			"zendesk-connector: only users can be granted organization membership",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("zendesk-connector: only users can be granted organization membership")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	organizationID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	organizationMembership := zendesk.OrganizationMembershipOptions{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	}
+	oganizationMembership, err := o.client.CreateOrganizationMembership(ctx, organizationMembership)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to add user to an organization: %s", err.Error())
+	}
+
+	l.Warn("Membership has been created..",
+		zap.String("ID", fmt.Sprintf("%d", oganizationMembership.ID)),
+		zap.String("UserID", fmt.Sprintf("%d", oganizationMembership.UserID)),
+		zap.String("OganizationID", fmt.Sprintf("%d", oganizationMembership.OrganizationID)),
+		zap.String("CreatedAt", oganizationMembership.CreatedAt.String()),
+	)
+
 	return nil, nil
 }
 
 func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	entitlement := grant.Entitlement
+	principal := grant.Principal
+
+	if principal.Id.ResourceType != resourceTypeUser.Id {
+		l.Warn(
+			"zendesk-connector: only users can have organization membership revoked",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("zendesk-connector: only users can have organization membership revoked")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	organizationID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	organizationMembership := zendesk.OrganizationMembershipListOptions{
+		OrganizationID: organizationID,
+		UserID:         userID,
+	}
+	organizationMembershipID, err := o.client.RemoveOrganizationMembershipByID(ctx, organizationMembership)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to revoke organization: %s", err.Error())
+	}
+
+	l.Warn("Membership has been revoked..",
+		zap.String("organizationMembershipID", organizationMembershipID),
+	)
+
 	return nil, nil
 }
 
