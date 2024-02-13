@@ -18,18 +18,10 @@ type Connector struct {
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
 	return []connectorbuilder.ResourceSyncer{
-		userBuilder(d.zendeskClient),
 		groupBuilder(d.zendeskClient),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient),
 		teamBuilder(d.zendeskClient),
-	}
-}
-
-// ResourceProvisioner returns a ResourceProvisioner for each resource type that should be synced from the upstream service.
-func (d *Connector) ResourceProvisioner(ctx context.Context) []connectorbuilder.ResourceProvisioner {
-	return []connectorbuilder.ResourceProvisioner{
-		groupBuilder(d.zendeskClient),
 	}
 }
 

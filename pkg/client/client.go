@@ -292,10 +292,10 @@ func (z *ZendeskClient) GetGroupResource(group zendesk.Group, resourceTypeGroup 
 }
 
 // GetRoleResource create a new connector resource for a Zendesk role.
-func (z *ZendeskClient) GetRoleResource(ctx context.Context, resourceTypeRole *v2.ResourceType, role string, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
-		"role_id":   role,
-		"role_name": role,
+		"role_id":   role.ID,
+		"role_name": role.Name,
 	}
 
 	roleTraitOptions := []rs.RoleTraitOption{
@@ -303,9 +303,9 @@ func (z *ZendeskClient) GetRoleResource(ctx context.Context, resourceTypeRole *v
 	}
 
 	ret, err := rs.NewRoleResource(
-		role,
+		role.Name,
 		resourceTypeRole,
-		role,
+		role.ID,
 		roleTraitOptions,
 		rs.WithParentResourceID(parentResourceID),
 	)
@@ -456,10 +456,6 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 		OrganizationMembership zendesk.OrganizationMembership `json:"organization_membership"`
 	}
 
-	// data.OrganizationMembership = zendesk.OrganizationMembership{
-	// 	UserID:         opts.UserID,
-	// 	OrganizationID: opts.OrganizationID,
-	// }
 	data.OrganizationMembership = opts
 	body, err := z.client.Post(ctx, "/organization_memberships.json", data)
 

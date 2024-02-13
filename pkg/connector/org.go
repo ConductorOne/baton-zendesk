@@ -91,7 +91,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 				rs.WithAnnotation(
 					&v2.ExternalLink{Url: org.URL},
 					&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
-					&v2.ChildResourceType{ResourceTypeId: resourceTypeUser.Id},
+					&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
 				),
 			)
 			if err != nil {
@@ -114,7 +114,7 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 			ent.WithAnnotation(&v2.V1Identifier{
 				Id: fmt.Sprintf("org:%s:role:%s", resource.Id.Resource, level),
 			}),
-			ent.WithGrantableTo(resourceTypeUser),
+			ent.WithGrantableTo(resourceTypeTeam),
 		))
 	}
 
@@ -140,7 +140,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 	}
 
 	for _, user := range users {
-		ur, err := o.client.GetUserResource(user, resourceTypeUser)
+		ur, err := o.client.GetUserResource(user, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -164,7 +164,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 
 func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
-	if principal.Id.ResourceType != resourceTypeUser.Id {
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
 			"zendesk-connector: only users can be granted organization membership",
 			zap.String("principal_type", principal.Id.ResourceType),
@@ -208,7 +208,7 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 	entitlement := grant.Entitlement
 	principal := grant.Principal
 
-	if principal.Id.ResourceType != resourceTypeUser.Id {
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
 			"zendesk-connector: only users can have organization membership revoked",
 			zap.String("principal_type", principal.Id.ResourceType),

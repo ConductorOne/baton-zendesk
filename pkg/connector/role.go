@@ -18,16 +18,6 @@ type roleResourceType struct {
 	client       *client.ZendeskClient
 }
 
-// https://support.zendesk.com/hc/en-us/articles/4408832171034-About-team-member-product-roles-and-access#topic_pzw_3bs_qmb
-var roles = []string{
-	"admin",
-	"agent",
-	"contributor",
-	"legacy agent",
-	"light agent",
-	"custom roles",
-}
-
 func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return r.resourceType
 }
@@ -36,8 +26,13 @@ func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 // Roles include a RoleTrait because they are the 'shape' of a standard group.
 func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, token *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var rv []*v2.Resource
-	for _, privilege := range roles {
-		rr, err := r.client.GetRoleResource(ctx, resourceTypeRole, privilege, parentId)
+	customRole, err := r.client.GetCustomRoles(ctx)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	for _, role := range customRole {
+		roleCopy := role
+		rr, err := r.client.GetRoleResource(&roleCopy, resourceTypeRole, parentId)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -91,7 +86,7 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 	for _, userAccount := range userAccounts {
 		userAccountCopy := userAccount
-		gr, err := r.client.GetUserAccountResource(&userAccountCopy, resourceTypeUser, resource.Id)
+		gr, err := r.client.GetUserAccountResource(&userAccountCopy, resourceTypeTeam, resource.Id)
 		if err != nil {
 			return nil, "", nil, err
 		}

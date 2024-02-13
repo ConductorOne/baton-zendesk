@@ -12,12 +12,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-func annotationsForUserResourceType() annotations.Annotations {
-	annos := annotations.Annotations{}
-	annos.Update(&v2.SkipEntitlementsAndGrants{})
-	return annos
-}
-
 func v1AnnotationsForResourceType(resourceTypeID string) annotations.Annotations {
 	annos := annotations.Annotations{}
 	annos.Update(&v2.V1Identifier{
@@ -68,7 +62,7 @@ func PopulateOptions(displayName, permission, resource string) []ent.Entitlement
 	options := []ent.EntitlementOption{
 		ent.WithDisplayName(fmt.Sprintf("%s %s %s", displayName, resource, permission)),
 		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
-		ent.WithGrantableTo(resourceTypeUser, resourceTypeGroup),
+		ent.WithGrantableTo(resourceTypeTeam, resourceTypeGroup),
 	}
 	return options
 }

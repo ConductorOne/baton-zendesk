@@ -94,7 +94,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 			return nil, "", nil, err
 		}
 
-		ur, err := g.client.GetUserResource(userAccountDetail, resourceTypeUser)
+		ur, err := g.client.GetUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -113,7 +113,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 
 func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
-	if principal.Id.ResourceType != resourceTypeUser.Id {
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
 			"zendesk-connector: only team members can be granted group membership",
 			zap.String("principal_type", principal.Id.ResourceType),
@@ -169,7 +169,7 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	entitlement := grant.Entitlement
 	principal := grant.Principal
 
-	if principal.Id.ResourceType != resourceTypeUser.Id {
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
 			"zendesk-connector: only team members can have group membership revoked",
 			zap.String("principal_type", principal.Id.ResourceType),
