@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -10,7 +11,9 @@ import (
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	"github.com/conductorone/baton-zendesk/pkg/client"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
+	"go.uber.org/zap"
 )
 
 type roleResourceType struct {
@@ -102,6 +105,54 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 }
 
 func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
+		l.Warn(
+			"baton-zendesk: only team members can be granted role membership",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("baton-zendesk: only team members can be granted role membership")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := r.client.GetUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user.Role == "end-user" {
+		l.Warn("user must be a team member",
+			zap.String("user", fmt.Sprintf("%d", user.ID)),
+			zap.String("user.Role", user.Role),
+		)
+		return nil, fmt.Errorf("user must be a team member")
+	}
+
+	roleID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	roleMembershipOptions := zendesk.CustomRole{
+		Name: fmt.Sprintf("Custom Role %d ", roleID),
+	}
+	membership, err := r.client.CreateCustomRoleMembership(ctx, roleMembershipOptions)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+	}
+
+	l.Warn("Role Membership has been created..",
+		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
+		zap.String("Name", membership.Name),
+		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
+		zap.String("CreatedAt", membership.CreatedAt.String()),
+	)
+
 	return nil, nil
 }
 

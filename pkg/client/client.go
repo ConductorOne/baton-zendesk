@@ -222,7 +222,7 @@ func (z *ZendeskClient) GetUserResource(user zendesk.User, resourceTypeUser *v2.
 	return resource, nil
 }
 
-// GetUserAccountResource create a new connector resource for a Jamf user account.
+// GetUserAccountResource creates a new connector resource for a Jamf user account.
 func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTypeUser *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	var (
 		firstName, lastName string
@@ -291,7 +291,7 @@ func (z *ZendeskClient) GetGroupResource(group zendesk.Group, resourceTypeGroup 
 	return ret, nil
 }
 
-// GetRoleResource create a new connector resource for a Zendesk role.
+// GetRoleResource creates a new connector resource for a Zendesk role.
 func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"role_id":   role.ID,
@@ -316,7 +316,7 @@ func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRo
 	return ret, nil
 }
 
-// teamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
+// GetTeamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
 func (z *ZendeskClient) GetTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		// // Store the org ID in the profile so that we can reference it when calculating grants
@@ -331,7 +331,7 @@ func (z *ZendeskClient) GetTeamResource(team *zendesk.User, resourceTypeTeam *v2
 		team.ID,
 		[]rs.GroupTraitOption{rs.WithGroupProfile(profile)},
 		rs.WithAnnotation(
-			&v2.V1Identifier{Id: fmt.Sprintf("team:%d", team.ID)},
+			&v2.V1Identifier{Id: fmt.Sprintf("team_member:%d", team.ID)},
 		),
 		rs.WithParentResourceID(parentResourceID),
 	)
@@ -364,7 +364,29 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	return result.GroupMemberships, nil
 }
 
-// GetGroupMembershipByGroup get an existing group membership.
+// CreateCustomRoleMembership Assigns an agent to a given group.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/account-configuration/custom_roles/#list-custom-roles
+func (z *ZendeskClient) CreateCustomRoleMembership(ctx context.Context, roleMemberships zendesk.CustomRole) (zendesk.CustomRole, error) {
+	var data, result struct {
+		CustomRoles zendesk.CustomRole `json:"custom_role"`
+	}
+
+	data.CustomRoles = roleMemberships
+	body, err := z.client.Post(ctx, "/custom_roles.json", data)
+	if err != nil {
+		return zendesk.CustomRole{}, err
+	}
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return zendesk.CustomRole{}, err
+	}
+
+	return result.CustomRoles, nil
+}
+
+// GetGroupMembershipByGroup gets an existing group membership.
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {
 	groups, nextPage, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
 		UserID:  groupMemberships.UserID,
@@ -383,7 +405,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 	return "", zendesk.Page{}, err
 }
 
-// GetOrganizationMembershipByUser get an existing organization membership.
+// GetOrganizationMembershipByUser gets an existing organization membership.
 func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, zendesk.Page, error) {
 	organizations, nextPage, err := z.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
 		UserID:         organizationMemberships.UserID,

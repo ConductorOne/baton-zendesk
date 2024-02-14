@@ -49,11 +49,11 @@ func (t *teamResourceType) Entitlements(_ context.Context, resource *v2.Resource
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
 			ent.WithAnnotation(
 				&v2.V1Identifier{
-					Id: fmt.Sprintf("team:%s:role:%s", resource.Id.Resource, level),
+					Id: fmt.Sprintf("team_member:%s:role:%s", resource.Id.Resource, level),
 				},
 			),
-			ent.WithDisplayName(fmt.Sprintf("%s Team %s", resource.DisplayName, titleCase(level))),
-			ent.WithDescription(fmt.Sprintf("Access to %s team in Zendesk", resource.DisplayName)),
+			ent.WithDisplayName(fmt.Sprintf("%s Team Member %s", resource.DisplayName, titleCase(level))),
+			ent.WithDescription(fmt.Sprintf("Access to %s team member in Zendesk", resource.DisplayName)),
 			ent.WithGrantableTo(resourceTypeTeam),
 		))
 	}
