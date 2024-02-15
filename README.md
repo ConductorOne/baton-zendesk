@@ -14,7 +14,7 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
 1. Zendesk `trial account` sign up for a free Zendesk Support trial  [developer site](https://www.zendesk.com/register/)
 2. Authentication method set to `Token access`
 3. Application Scopes: 
-  - manage users
+  - manage team members
   - manage groups
   - manage organizations
   - grant read resource
@@ -58,9 +58,10 @@ baton resources
 # Data Model
 
 `baton-zendesk` pulls down information about the following Zendesk resources:
-- Users
+- Team Members
 - Groups
 - Organizations
+- Roles
 
 # Contributing, Support, and Issues
 
