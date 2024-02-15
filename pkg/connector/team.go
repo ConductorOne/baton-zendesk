@@ -81,7 +81,7 @@ func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pT
 
 	for _, user := range users {
 		userCopy := user
-		if user.Role == "agent" || user.Role == "admin" && !user.Suspended { // team member
+		if t.client.IsValidTeamMember(&userCopy) { // team member
 			res, err := t.client.GetTeamResource(&userCopy, resourceTypeTeam, parentID)
 			if err != nil {
 				return nil, "", nil, err

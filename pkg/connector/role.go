@@ -45,59 +45,78 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 	return rv, "", nil, nil
 }
 
-func (r *roleResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	var rv []*v2.Entitlement
+func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+	var (
+		pageToken    int
+		err          error
+		supportRoles = make(map[string]int64)
+		rv           []*v2.Entitlement
+	)
 
-	assigmentOptions := PopulateOptions(resource.DisplayName, memberEntitlement, resource.Id.Resource)
-	assignmentEn := ent.NewAssignmentEntitlement(resource, memberEntitlement, assigmentOptions...)
+	if token.Token != "" {
+		pageToken, err = strconv.Atoi(token.Token)
+		if err != nil {
+			return nil, "", nil, err
+		}
+	}
 
-	permissionOptions := PopulateOptions(resource.DisplayName, adminEntitlement, resource.Id.Resource)
-	permissionEn := ent.NewPermissionEntitlement(resource, adminEntitlement, permissionOptions...)
+	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
+	if err != nil {
+		return nil, "", nil, err
+	}
 
-	rv = append(rv, assignmentEn, permissionEn)
+	for _, user := range users {
+		userCopy := user
+		if r.client.IsValidTeamMember(&userCopy) { // team member
+			supportRoles[user.Role] = user.ID
+		}
+	}
 
-	return rv, "", nil, nil
+	for supportRole := range supportRoles {
+		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
+		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
+
+		rv = append(rv, permissionEn)
+	}
+
+	return rv, nextPageToken, nil, nil
 }
 
 func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	var rv []*v2.Grant
-	userAccounts, groups, nextPageToken, err := r.GetAccounts(ctx)
-	if err != nil {
-		return nil, "", nil, err
-	}
+	var (
+		pageToken int
+		err       error
+		rv        []*v2.Grant
+	)
 
-	customRoles, err := r.client.GetCustomRoles(ctx)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
-	for _, group := range groups {
-		groupCopy := group
-		gr, err := r.client.GetGroupResource(groupCopy, resourceTypeGroup, resource.Id)
+	if token.Token != "" {
+		pageToken, err = strconv.Atoi(token.Token)
 		if err != nil {
 			return nil, "", nil, err
 		}
+	}
 
-		for _, customRole := range customRoles {
-			if resource.Id.Resource == customRole.Name {
-				rv = append(rv, grant.NewGrant(resource, memberEntitlement, gr.Id, grant.WithAnnotation(&v2.V1Identifier{
-					Id: fmt.Sprintf("role-grant:%s:%d:%s", resource.Id.Resource, group.ID, customRole.Name),
-				})))
+	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
+	for _, user := range users {
+		userCopy := user
+		if r.client.IsValidTeamMember(&userCopy) { // team member
+			resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
+			if err != nil {
+				return nil, "", nil, err
 			}
-		}
-	}
+			if user.CustomRoleID == resourceId {
+				ur, err := r.client.GetUserRoleResource(&userCopy, resourceTypeTeam)
+				if err != nil {
+					return nil, "", nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
+				}
 
-	for _, userAccount := range userAccounts {
-		userAccountCopy := userAccount
-		gr, err := r.client.GetUserAccountResource(&userAccountCopy, resourceTypeTeam, resource.Id)
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		if resource.Id.Resource == userAccount.Role {
-			rv = append(rv, grant.NewGrant(resource, memberEntitlement, gr.Id, grant.WithAnnotation(&v2.V1Identifier{
-				Id: fmt.Sprintf("role-grant:%s:%d:%s", resource.Id.Resource, userAccount.ID, userAccount.Role),
-			})))
+				gr := grant.NewGrant(resource, user.Role, ur.Id)
+				rv = append(rv, gr)
+			}
 		}
 	}
 

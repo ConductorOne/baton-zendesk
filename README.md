@@ -12,16 +12,23 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
 ## Prerequisites
 
 1. Zendesk `trial account` sign up for a free Zendesk Support trial  [developer site](https://www.zendesk.com/register/)
-2. Authentication method set to `OAuth 2.0 with Client Credentials Grant (Server Authentication)`
-3. App access level set to: `App + Enterprise Access`
-4. Application Scopes: 
+2. Authentication method set to `Token access`
+3. Application Scopes: 
   - manage users
   - manage groups
   - manage organizations
   - grant read resource
-5. App must be approved by your Zendesk admin. More info [here](https://developer.box.com/guides/authorization/custom-app-approval/)
-6. Enterprise ID can be found in `Developer console -> Your App -> General settings`
-7. Client ID and Client Secret can be found in `Developer console -> Your App -> Configuration`
+
+## Getting a trial account
+For a trial Support account, see https://www.zendesk.com/register/free-trial/
+https://developer.zendesk.com/documentation/api-basics/getting-started/getting-a-trial-or-sponsored-account-for-development/#requesting-a-sponsored-test-account
+
+## Requesting a sponsored test account
+1. If not already done, sign up for a free Zendesk Support trial at https://www.zendesk.com/register/free-trial/
+2. When you're setting up the account, make sure to add the prefix "d3v-" to your chosen subdomain name. Example: d3v-mondocam.zendesk.com.
+If you already have a trial account, add the "d3v-" prefix to your subdomain. See Renaming your subdomain for instructi3.ons.
+3. Fill out the Sponsored Account Request Form https://forms.gle/NDkrqK9xkZrnWoyk9
+Zendesk will inform you when your trial account becomes a sponsored account.
 
 ## brew
 

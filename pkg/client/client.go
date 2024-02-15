@@ -492,3 +492,69 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 
 	return result.OrganizationMembership, err
 }
+
+// Create a new connector resource for a Zendesk user.
+func (z *ZendeskClient) GetUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
+	firstname, lastname := splitFullName(user.Name)
+	profile := map[string]interface{}{
+		"user_id":    user.ID,
+		"first_name": firstname,
+		"last_name":  lastname,
+		"login":      user.Email,
+	}
+
+	accountType := v2.UserTrait_ACCOUNT_TYPE_HUMAN
+	var status v2.UserTrait_Status_Status
+	switch user.Suspended {
+	case true:
+		status = v2.UserTrait_Status_STATUS_ENABLED
+	case false:
+		status = v2.UserTrait_Status_STATUS_DISABLED
+	default:
+		status = v2.UserTrait_Status_STATUS_UNSPECIFIED
+	}
+
+	userTraitOptions := []rs.UserTraitOption{
+		rs.WithUserProfile(profile),
+		rs.WithEmail(user.Email, true),
+		rs.WithStatus(status),
+		rs.WithAccountType(accountType),
+	}
+
+	ret, err := rs.NewUserResource(
+		user.Name,
+		resourceTypeTeam,
+		user.ID,
+		userTraitOptions,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+// splitFullName returns firstName and lastName.
+func splitFullName(name string) (string, string) {
+	names := strings.SplitN(name, " ", 2)
+	var firstName, lastName string
+
+	switch len(names) {
+	case 1:
+		firstName = names[0]
+	case 2:
+		firstName = names[0]
+		lastName = names[1]
+	}
+
+	return firstName, lastName
+}
+
+// IsValidTeamMember checks team members.
+func (z *ZendeskClient) IsValidTeamMember(user *zendesk.User) bool {
+	if user.Role == "agent" || user.Role == "admin" && !user.Suspended { // team member
+		return true
+	}
+
+	return false
+}
