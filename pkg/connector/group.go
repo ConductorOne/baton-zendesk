@@ -103,22 +103,18 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 
 		ur, err := g.client.GetUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
 
 		if userAccountDetail.Role == adminEntitlement {
 			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
-			rv = append(rv, adminsGrant)
-
-			adminsGrant = grant.NewGrant(ur, adminEntitlement, resource.Id)
-			rv = append(rv, adminsGrant)
+			teamAdminsGrant := grant.NewGrant(ur, adminEntitlement, resource.Id)
+			rv = append(rv, adminsGrant, teamAdminsGrant)
 		}
 
 		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
-		rv = append(rv, membershipGrant)
-
-		membershipGrant = grant.NewGrant(ur, memberEntitlement, resource.Id)
-		rv = append(rv, membershipGrant)
+		teamMembershipGrant := grant.NewGrant(ur, memberEntitlement, resource.Id)
+		rv = append(rv, membershipGrant, teamMembershipGrant)
 	}
 
 	return rv, nextPageToken, nil, nil

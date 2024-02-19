@@ -107,10 +107,8 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 				}
 
 				gr := grant.NewGrant(resource, user.Role, ur.Id)
-				rv = append(rv, gr)
-
-				gr = grant.NewGrant(ur, user.Role, resource.Id)
-				rv = append(rv, gr)
+				tr := grant.NewGrant(ur, user.Role, resource.Id)
+				rv = append(rv, gr, tr)
 			}
 		}
 	}
