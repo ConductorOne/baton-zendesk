@@ -109,8 +109,8 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
-			ent.WithDisplayName(fmt.Sprintf("%s Org %s", resource.DisplayName, titleCase(level))),
-			ent.WithDescription(fmt.Sprintf("Access to %s org in Zendesk", resource.DisplayName)),
+			ent.WithDisplayName(fmt.Sprintf("%s Organization %s", resource.DisplayName, titleCase(level))),
+			ent.WithDescription(fmt.Sprintf("Access to %s organization in Zendesk", resource.DisplayName)),
 			ent.WithAnnotation(&v2.V1Identifier{
 				Id: fmt.Sprintf("org:%s:role:%s", resource.Id.Resource, level),
 			}),

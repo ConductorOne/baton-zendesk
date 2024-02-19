@@ -47,10 +47,9 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 
 func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var (
-		pageToken    int
-		err          error
-		supportRoles = make(map[string]int64)
-		rv           []*v2.Entitlement
+		pageToken int
+		err       error
+		rv        []*v2.Entitlement
 	)
 
 	if token.Token != "" {
@@ -65,14 +64,7 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		return nil, "", nil, err
 	}
 
-	for _, user := range users {
-		userCopy := user
-		if r.client.IsValidTeamMember(&userCopy) { // team member
-			supportRoles[user.Role] = user.ID
-		}
-	}
-
-	for supportRole := range supportRoles {
+	for supportRole := range r.client.GetUserSupportRoles(users) {
 		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
 		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
 
@@ -116,6 +108,9 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 				gr := grant.NewGrant(resource, user.Role, ur.Id)
 				rv = append(rv, gr)
+
+				gr = grant.NewGrant(ur, user.Role, resource.Id)
+				rv = append(rv, gr)
 			}
 		}
 	}
@@ -144,6 +139,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 	if err != nil {
 		return nil, err
 	}
+
 	if user.Role == "end-user" {
 		l.Warn("user must be a team member",
 			zap.String("user", fmt.Sprintf("%d", user.ID)),

@@ -558,3 +558,16 @@ func (z *ZendeskClient) IsValidTeamMember(user *zendesk.User) bool {
 
 	return false
 }
+
+// GetSupportRoles gets user roles.
+func (z *ZendeskClient) GetUserSupportRoles(users []zendesk.User) map[string]int64 {
+	var supportRoles = make(map[string]int64)
+	for _, user := range users {
+		userCopy := user
+		if z.IsValidTeamMember(&userCopy) { // only team member
+			supportRoles[user.Role] = user.ID
+		}
+	}
+
+	return supportRoles
+}

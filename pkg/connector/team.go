@@ -8,8 +8,8 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
-
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
+
 	"github.com/conductorone/baton-zendesk/pkg/client"
 )
 
@@ -42,18 +42,15 @@ func (t *teamResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return t.resourceType
 }
 
-// Entitlements always returns an empty slice for users.
-func (t *teamResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (t *teamResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	rv := make([]*v2.Entitlement, 0, len(teamAccessLevels))
 	for _, level := range teamAccessLevels {
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
-			ent.WithAnnotation(
-				&v2.V1Identifier{
-					Id: fmt.Sprintf("team_member:%s:role:%s", resource.Id.Resource, level),
-				},
-			),
 			ent.WithDisplayName(fmt.Sprintf("%s Team Member %s", resource.DisplayName, titleCase(level))),
 			ent.WithDescription(fmt.Sprintf("Access to %s team member in Zendesk", resource.DisplayName)),
+			ent.WithAnnotation(&v2.V1Identifier{
+				Id: fmt.Sprintf("team_member:%s:role:%s", resource.Id.Resource, level),
+			}),
 			ent.WithGrantableTo(resourceTypeTeam),
 		))
 	}

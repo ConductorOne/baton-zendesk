@@ -26,6 +26,11 @@ type groupResourceType struct {
 	client       *client.ZendeskClient
 }
 
+var groupEntitlementAccessLevels = []string{
+	memberEntitlement,
+	adminEntitlement,
+}
+
 func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return g.resourceType
 }
@@ -64,14 +69,16 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, p
 
 func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var rv []*v2.Entitlement
-
-	assigmentOptions := PopulateOptions(resource.DisplayName, memberEntitlement, resource.Id.Resource)
-	assignmentEn := ent.NewAssignmentEntitlement(resource, memberEntitlement, assigmentOptions...)
-
-	permissionOptions := PopulateOptions(resource.DisplayName, adminEntitlement, resource.Id.Resource)
-	permissionEn := ent.NewPermissionEntitlement(resource, adminEntitlement, permissionOptions...)
-
-	rv = append(rv, assignmentEn, permissionEn)
+	for _, level := range groupEntitlementAccessLevels {
+		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
+			ent.WithDisplayName(fmt.Sprintf("%s Group %s", resource.DisplayName, titleCase(level))),
+			ent.WithDescription(fmt.Sprintf("Access to %s group in Zendesk", resource.DisplayName)),
+			ent.WithAnnotation(&v2.V1Identifier{
+				Id: fmt.Sprintf("group:%s:role:%s", resource.Id.Resource, level),
+			}),
+			ent.WithGrantableTo(resourceTypeTeam),
+		))
+	}
 
 	return rv, "", nil, nil
 }
@@ -99,13 +106,19 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 			return nil, "", nil, err
 		}
 
-		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
-		rv = append(rv, membershipGrant)
-
 		if userAccountDetail.Role == adminEntitlement {
 			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
 			rv = append(rv, adminsGrant)
+
+			adminsGrant = grant.NewGrant(ur, adminEntitlement, resource.Id)
+			rv = append(rv, adminsGrant)
 		}
+
+		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
+		rv = append(rv, membershipGrant)
+
+		membershipGrant = grant.NewGrant(ur, memberEntitlement, resource.Id)
+		rv = append(rv, membershipGrant)
 	}
 
 	return rv, nextPageToken, nil, nil
