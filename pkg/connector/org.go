@@ -140,7 +140,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 	}
 
 	for _, user := range users {
-		ur, err := o.client.GetUserResource(user, resourceTypeTeam)
+		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -192,7 +192,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 		return nil, fmt.Errorf("zendesk-connector: failed to add user to an organization: %s", err.Error())
 	}
 
-	l.Warn("Membership has been created..",
+	l.Warn("Membership has been created.",
 		zap.String("ID", fmt.Sprintf("%d", oganizationMembership.ID)),
 		zap.String("UserID", fmt.Sprintf("%d", oganizationMembership.UserID)),
 		zap.String("OganizationID", fmt.Sprintf("%d", oganizationMembership.OrganizationID)),

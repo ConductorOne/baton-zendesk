@@ -56,7 +56,7 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, p
 	}
 
 	for _, group := range groups {
-		res, err := g.client.GetGroupResource(group, resourceTypeGroup, parentId)
+		res, err := getGroupResource(group, resourceTypeGroup, parentId)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -90,18 +90,26 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		return nil, "", nil, err
 	}
 
+	opts := zendesk.UserListOptions{
+		Roles: []string{
+			"admin",
+			"agent",
+		},
+	}
+
+	users, _, err := g.client.GetUsers(ctx, &opts)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
 	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId))
 	if err != nil {
 		return nil, "", nil, err
 	}
 
-	for _, user := range groupMemberships {
-		userAccountDetail, err := g.client.GetUser(ctx, user.UserID)
-		if err != nil {
-			return nil, "", nil, err
-		}
-
-		ur, err := g.client.GetUserResource(userAccountDetail, resourceTypeTeam)
+	for _, group := range groupMemberships {
+		userAccountDetail := getUserByID(group.UserID, users)
+		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
@@ -162,8 +170,8 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
 
-	l.Warn("Membership has been created..",
-		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
+	l.Warn("Membership has been created.",
+		zap.Int64("ID", membership.ID),
 		zap.String("UserID", fmt.Sprintf("%d", membership.UserID)),
 		zap.String("GroupID", fmt.Sprintf("%d", membership.GroupID)),
 		zap.String("CreatedAt", membership.CreatedAt.String()),

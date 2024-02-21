@@ -125,6 +125,31 @@ func (z *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User
 	return user, err
 }
 
+// GetUsers gets users based on roles.
+func (z *ZendeskClient) GetUsers(ctx context.Context, opts *zendesk.UserListOptions) (map[int64]zendesk.User, string, error) {
+	var (
+		mapUsers      = make(map[int64]zendesk.User)
+		nextPageToken string
+	)
+	users, page, err := z.client.GetUsers(ctx, opts)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if page.NextPage != nil {
+		nextPageToken, err = parseNextPage(*page.NextPage)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+
+	for _, user := range users {
+		mapUsers[user.ID] = user
+	}
+
+	return mapUsers, nextPageToken, err
+}
+
 // GetGroupDetails get an existing group.
 func (z *ZendeskClient) GetGroupDetails(ctx context.Context, groupID int64) (zendesk.Group, error) {
 	group, err := z.client.GetGroup(ctx, groupID)
@@ -202,26 +227,6 @@ func (z *ZendeskClient) GetRole(ctx context.Context, membership zendesk.Organiza
 	return "", zendesk.Page{}, err
 }
 
-// GetCustomRoles fetch CustomRoles list.
-func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
-	customRole, err := z.client.GetCustomRoles(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to fetch customroles: %w", err)
-	}
-
-	return customRole, nil
-}
-
-// GetUserResource gets a new connector resource for a Zenddesk group.
-func (z *ZendeskClient) GetUserResource(user zendesk.User, resourceTypeUser *v2.ResourceType) (*v2.Resource, error) {
-	resource, err := rs.NewUserResource(user.Name, resourceTypeUser, user.ID, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return resource, nil
-}
-
 // GetUserAccountResource creates a new connector resource for a Jamf user account.
 func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTypeUser *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	var (
@@ -270,27 +275,6 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 	return ret, nil
 }
 
-// GetGroupResource gets a new connector resource for a Zenddesk group.
-func (z *ZendeskClient) GetGroupResource(group zendesk.Group, resourceTypeGroup *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	profile := map[string]interface{}{
-		"group_id":   group.ID,
-		"group_name": group.Name,
-	}
-	groupTraitOptions := []rs.GroupTraitOption{rs.WithGroupProfile(profile)}
-	ret, err := rs.NewGroupResource(
-		group.Name,
-		resourceTypeGroup,
-		group.ID,
-		groupTraitOptions,
-		rs.WithParentResourceID(parentResourceID),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret, nil
-}
-
 // GetRoleResource creates a new connector resource for a Zendesk role.
 func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
@@ -316,33 +300,7 @@ func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRo
 	return ret, nil
 }
 
-// GetTeamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
-func (z *ZendeskClient) GetTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	profile := map[string]interface{}{
-		// // Store the org ID in the profile so that we can reference it when calculating grants
-		// "orgID": team.GetOrganization().GetID(),
-		"user_id":   team.ID,
-		"user_name": team.Name,
-	}
-
-	ret, err := rs.NewGroupResource(
-		team.Name,
-		resourceTypeTeam,
-		team.ID,
-		[]rs.GroupTraitOption{rs.WithGroupProfile(profile)},
-		rs.WithAnnotation(
-			&v2.V1Identifier{Id: fmt.Sprintf("team_member:%d", team.ID)},
-		),
-		rs.WithParentResourceID(parentResourceID),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret, nil
-}
-
-// CreateGroupMemberchip Assigns an agent to a given group.
+// CreateGroupMembership Assigns an agent to a given group.
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
 func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMemberships zendesk.GroupMembership) (zendesk.GroupMembership, error) {
@@ -493,81 +451,12 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 	return result.OrganizationMembership, err
 }
 
-// Create a new connector resource for a Zendesk user.
-func (z *ZendeskClient) GetUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
-	firstname, lastname := splitFullName(user.Name)
-	profile := map[string]interface{}{
-		"user_id":    user.ID,
-		"first_name": firstname,
-		"last_name":  lastname,
-		"login":      user.Email,
-	}
-
-	accountType := v2.UserTrait_ACCOUNT_TYPE_HUMAN
-	var status v2.UserTrait_Status_Status
-	switch user.Suspended {
-	case true:
-		status = v2.UserTrait_Status_STATUS_ENABLED
-	case false:
-		status = v2.UserTrait_Status_STATUS_DISABLED
-	default:
-		status = v2.UserTrait_Status_STATUS_UNSPECIFIED
-	}
-
-	userTraitOptions := []rs.UserTraitOption{
-		rs.WithUserProfile(profile),
-		rs.WithEmail(user.Email, true),
-		rs.WithStatus(status),
-		rs.WithAccountType(accountType),
-	}
-
-	ret, err := rs.NewUserResource(
-		user.Name,
-		resourceTypeTeam,
-		user.ID,
-		userTraitOptions,
-	)
+// GetCustomRoles fetch CustomRoles list.
+func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
+	customRole, err := z.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("zendesk-connector: failed to fetch customroles: %w", err)
 	}
 
-	return ret, nil
-}
-
-// splitFullName returns firstName and lastName.
-func splitFullName(name string) (string, string) {
-	names := strings.SplitN(name, " ", 2)
-	var firstName, lastName string
-
-	switch len(names) {
-	case 1:
-		firstName = names[0]
-	case 2:
-		firstName = names[0]
-		lastName = names[1]
-	}
-
-	return firstName, lastName
-}
-
-// IsValidTeamMember checks team members.
-func (z *ZendeskClient) IsValidTeamMember(user *zendesk.User) bool {
-	if user.Role == "agent" || user.Role == "admin" && !user.Suspended { // team member
-		return true
-	}
-
-	return false
-}
-
-// GetSupportRoles gets user roles.
-func (z *ZendeskClient) GetUserSupportRoles(users []zendesk.User) map[string]int64 {
-	var supportRoles = make(map[string]int64)
-	for _, user := range users {
-		userCopy := user
-		if z.IsValidTeamMember(&userCopy) { // only team member
-			supportRoles[user.Role] = user.ID
-		}
-	}
-
-	return supportRoles
+	return customRole, nil
 }

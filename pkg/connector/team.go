@@ -78,8 +78,8 @@ func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pT
 
 	for _, user := range users {
 		userCopy := user
-		if t.client.IsValidTeamMember(&userCopy) { // team member
-			res, err := t.client.GetTeamResource(&userCopy, resourceTypeTeam, parentID)
+		if IsValidTeamMember(&userCopy) { // team member
+			res, err := GetTeamResource(&userCopy, resourceTypeTeam, parentID)
 			if err != nil {
 				return nil, "", nil, err
 			}

@@ -64,7 +64,7 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		return nil, "", nil, err
 	}
 
-	for supportRole := range r.client.GetUserSupportRoles(users) {
+	for supportRole := range GetUserSupportRoles(users) {
 		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
 		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
 
@@ -95,13 +95,13 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 	for _, user := range users {
 		userCopy := user
-		if r.client.IsValidTeamMember(&userCopy) { // team member
+		if IsValidTeamMember(&userCopy) { // team member
 			resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 			if err != nil {
 				return nil, "", nil, err
 			}
 			if user.CustomRoleID == resourceId {
-				ur, err := r.client.GetUserRoleResource(&userCopy, resourceTypeTeam)
+				ur, err := getUserRoleResource(&userCopy, resourceTypeTeam)
 				if err != nil {
 					return nil, "", nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
 				}
@@ -159,7 +159,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
 
-	l.Warn("Role Membership has been created..",
+	l.Warn("Role Membership has been created.",
 		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
 		zap.String("Name", membership.Name),
 		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
