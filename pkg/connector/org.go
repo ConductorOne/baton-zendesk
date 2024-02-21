@@ -60,45 +60,43 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
 
+	optsOrg := zendesk.UserListOptions{
+		Roles: []string{
+			"admin",
+		},
+	}
+
+	users, _, err := o.client.GetUsers(ctx, &optsOrg)
+	if err != nil {
+		return nil, "", nil, err
+	}
+
 	for _, org := range orgs {
 		if _, ok := o.orgs[org.Name]; !ok && len(o.orgs) > 0 {
 			continue
 		}
 
-		memberships, _, err := o.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
-			OrganizationID: org.ID,
-		})
-		if err != nil {
-			return nil, "", nil, err
-		}
+		members := getOrganizationMembers(org.ID, users)
+		for _, member := range members {
+			if member.OrganizationID == org.ID {
+				orgResource, err := rs.NewResource(
+					org.Name,
+					resourceTypeOrg,
+					org.ID,
+					rs.WithParentResourceID(parentResourceID),
+					rs.WithAnnotation(
+						&v2.ExternalLink{Url: org.URL},
+						&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
+						&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
+					),
+				)
 
-		for _, membership := range memberships {
-			membershipRole, _, err := o.client.GetRole(ctx, membership)
-			if err != nil {
-				return nil, "", nil, fmt.Errorf("zendesk-connector: failed to get role member: %w", err)
+				if err != nil {
+					return nil, "", nil, err
+				}
+
+				ret = append(ret, orgResource)
 			}
-
-			// Only sync orgs that we are an admin for
-			if strings.ToLower(membershipRole) != orgRoleAdmin {
-				continue
-			}
-
-			orgResource, err := rs.NewResource(
-				org.Name,
-				resourceTypeOrg,
-				org.ID,
-				rs.WithParentResourceID(parentResourceID),
-				rs.WithAnnotation(
-					&v2.ExternalLink{Url: org.URL},
-					&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
-					&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
-				),
-			)
-			if err != nil {
-				return nil, "", nil, err
-			}
-
-			ret = append(ret, orgResource)
 		}
 	}
 

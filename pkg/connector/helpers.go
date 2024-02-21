@@ -127,8 +127,8 @@ func splitFullName(name string) (string, string) {
 	return firstName, lastName
 }
 
-// IsValidTeamMember checks team members.
-func IsValidTeamMember(user *zendesk.User) bool {
+// isValidTeamMember checks team members.
+func isValidTeamMember(user *zendesk.User) bool {
 	if user.Role == "agent" || user.Role == "admin" && !user.Suspended { // team member
 		return true
 	}
@@ -141,7 +141,7 @@ func GetUserSupportRoles(users []zendesk.User) map[string]int64 {
 	var supportRoles = make(map[string]int64)
 	for _, user := range users {
 		userCopy := user
-		if IsValidTeamMember(&userCopy) { // only team member
+		if isValidTeamMember(&userCopy) { // only team member
 			supportRoles[user.Role] = user.ID
 		}
 	}
@@ -149,8 +149,8 @@ func GetUserSupportRoles(users []zendesk.User) map[string]int64 {
 	return supportRoles
 }
 
-// GetTeamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
-func GetTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+// getTeamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
+func getTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{
 		"user_id":   team.ID,
 		"user_name": team.Name,
@@ -204,10 +204,23 @@ func getUserResource(user zendesk.User, resourceTypeUser *v2.ResourceType) (*v2.
 	return resource, nil
 }
 
+// getUserByID gets an user by ID.
 func getUserByID(userID int64, users map[int64]zendesk.User) zendesk.User {
 	if user, ok := users[userID]; ok {
 		return user
 	}
 
 	return zendesk.User{}
+}
+
+// getOrganizationMembers gets organization members.
+func getOrganizationMembers(orgID int64, users map[int64]zendesk.User) []zendesk.User {
+	var members []zendesk.User
+	for _, user := range users {
+		if user.OrganizationID == orgID {
+			members = append(members, user)
+		}
+	}
+
+	return members
 }

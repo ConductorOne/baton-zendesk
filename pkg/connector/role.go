@@ -95,7 +95,7 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 	for _, user := range users {
 		userCopy := user
-		if IsValidTeamMember(&userCopy) { // team member
+		if isValidTeamMember(&userCopy) { // team member
 			resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 			if err != nil {
 				return nil, "", nil, err
