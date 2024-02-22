@@ -35,7 +35,7 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 	}
 	for _, role := range customRole {
 		roleCopy := role
-		rr, err := r.client.GetRoleResource(&roleCopy, resourceTypeRole, parentId)
+		rr, err := getRoleResource(&roleCopy, resourceTypeRole, parentId)
 		if err != nil {
 			return nil, "", nil, err
 		}
@@ -64,7 +64,7 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		return nil, "", nil, err
 	}
 
-	for supportRole := range GetUserSupportRoles(users) {
+	for supportRole := range getUserSupportRoles(users) {
 		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
 		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
 

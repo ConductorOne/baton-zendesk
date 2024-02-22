@@ -191,7 +191,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	}
 
 	l.Warn("Membership has been created.",
-		zap.String("ID", fmt.Sprintf("%d", oganizationMembership.ID)),
+		zap.Int64("ID", oganizationMembership.ID),
 		zap.String("UserID", fmt.Sprintf("%d", oganizationMembership.UserID)),
 		zap.String("OganizationID", fmt.Sprintf("%d", oganizationMembership.OrganizationID)),
 		zap.String("CreatedAt", oganizationMembership.CreatedAt.String()),

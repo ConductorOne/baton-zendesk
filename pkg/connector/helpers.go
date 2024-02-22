@@ -136,8 +136,8 @@ func isValidTeamMember(user *zendesk.User) bool {
 	return false
 }
 
-// GetUserSupportRoles gets user roles.
-func GetUserSupportRoles(users []zendesk.User) map[string]int64 {
+// getUserSupportRoles gets user roles.
+func getUserSupportRoles(users []zendesk.User) map[string]int64 {
 	var supportRoles = make(map[string]int64)
 	for _, user := range users {
 		userCopy := user
@@ -223,4 +223,29 @@ func getOrganizationMembers(orgID int64, users map[int64]zendesk.User) []zendesk
 	}
 
 	return members
+}
+
+// getRoleResource creates a new connector resource for a Zendesk role.
+func getRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+	profile := map[string]interface{}{
+		"role_id":   role.ID,
+		"role_name": role.Name,
+	}
+
+	roleTraitOptions := []rs.RoleTraitOption{
+		rs.WithRoleProfile(profile),
+	}
+
+	ret, err := rs.NewRoleResource(
+		role.Name,
+		resourceTypeRole,
+		role.ID,
+		roleTraitOptions,
+		rs.WithParentResourceID(parentResourceID),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
 }
