@@ -150,7 +150,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	}
 	if user.Role == "end-user" {
 		l.Warn("user must be a team member",
-			zap.String("user", fmt.Sprintf("%d", user.ID)),
+			zap.Int64("UserID", user.ID),
 			zap.String("user.Role", user.Role),
 		)
 		return nil, fmt.Errorf("user must be a team member")
@@ -172,8 +172,8 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 
 	l.Warn("Membership has been created.",
 		zap.Int64("ID", membership.ID),
-		zap.String("UserID", fmt.Sprintf("%d", membership.UserID)),
-		zap.String("GroupID", fmt.Sprintf("%d", membership.GroupID)),
+		zap.Int64("UserID", membership.UserID),
+		zap.Int64("GroupID", membership.GroupID),
 		zap.String("CreatedAt", membership.CreatedAt.String()),
 	)
 

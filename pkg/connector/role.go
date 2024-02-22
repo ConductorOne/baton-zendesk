@@ -140,7 +140,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 
 	if user.Role == "end-user" {
 		l.Warn("user must be a team member",
-			zap.String("user", fmt.Sprintf("%d", user.ID)),
+			zap.Int64("user", user.ID),
 			zap.String("user.Role", user.Role),
 		)
 		return nil, fmt.Errorf("user must be a team member")
@@ -160,7 +160,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 	}
 
 	l.Warn("Role Membership has been created.",
-		zap.String("ID", fmt.Sprintf("%d", membership.ID)),
+		zap.Int64("ID", membership.ID),
 		zap.String("Name", membership.Name),
 		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
 		zap.String("CreatedAt", membership.CreatedAt.String()),
@@ -171,41 +171,6 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 
 func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
 	return nil, nil
-}
-
-// GetAccounts returns all zendesk users and groups.
-func (r *roleResourceType) GetAccounts(ctx context.Context) ([]zendesk.User, []zendesk.Group, string, error) {
-	var (
-		userAccounts   []zendesk.User
-		groupsAccounts []zendesk.Group
-	)
-	users, nextPageToken, err := r.client.ListUsers(ctx, 0)
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	groups, _, err := r.client.ListGroups(ctx, 0)
-	if err != nil {
-		return nil, nil, "", err
-	}
-
-	for _, user := range users {
-		userAccountInfo, err := r.client.GetUser(ctx, user.ID)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		userAccounts = append(userAccounts, userAccountInfo)
-	}
-
-	for _, group := range groups {
-		groupInfo, err := r.client.GetGroupDetails(ctx, group.ID)
-		if err != nil {
-			return nil, nil, "", err
-		}
-		groupsAccounts = append(groupsAccounts, groupInfo)
-	}
-
-	return userAccounts, groupsAccounts, nextPageToken, nil
 }
 
 func roleBuilder(c *client.ZendeskClient) *roleResourceType {
