@@ -275,31 +275,6 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 	return ret, nil
 }
 
-// GetRoleResource creates a new connector resource for a Zendesk role.
-func (z *ZendeskClient) GetRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
-	profile := map[string]interface{}{
-		"role_id":   role.ID,
-		"role_name": role.Name,
-	}
-
-	roleTraitOptions := []rs.RoleTraitOption{
-		rs.WithRoleProfile(profile),
-	}
-
-	ret, err := rs.NewRoleResource(
-		role.Name,
-		resourceTypeRole,
-		role.ID,
-		roleTraitOptions,
-		rs.WithParentResourceID(parentResourceID),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ret, nil
-}
-
 // CreateGroupMembership Assigns an agent to a given group.
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
