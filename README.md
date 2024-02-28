@@ -6,7 +6,7 @@ Check out [Baton](https://github.com/conductorone/baton) to learn more the proje
 # Getting Started
 You can try out the Zendesk platform with a free, 14-day trial account. If you're interested in becoming a Zendesk developer partner, you can convert your trial account into a sponsored Zendesk Support account.
 
-As part of becoming a Zendesk developer partner, Zendesk sponsors an instance for up to 5 agents that you can use for developing, demoing, and troubleshooting your app or integration.
+As part of becoming a Zendesk developer partner, Zendesk sponsors an instance for up to 5 agents that you can use for developing, and troubleshooting your app or integration.
 
 Unlike a trial account, a sponsored account does not expire after 14 days.
 ## Prerequisites
@@ -20,16 +20,9 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
   - grant resources
   - revoke resources
 
-## Getting a trial account
+## Requesting a sponsored test account
 For a trial Support account, see 
 https://developer.zendesk.com/documentation/api-basics/getting-started/getting-a-trial-or-sponsored-account-for-development/#requesting-a-sponsored-test-account
-
-## Requesting a sponsored test account
-1. If not already done, sign up for a free Zendesk Support trial at https://www.zendesk.com/register/free-trial/
-2. When you're setting up the account, make sure to add the prefix "d3v-" to your chosen subdomain name. Example: d3v-mondocam.zendesk.com.
-If you already have a trial account, add the "d3v-" prefix to your subdomain. See Renaming your subdomain for instructi3.ons.
-3. Fill out the Sponsored Account Request Form https://forms.gle/NDkrqK9xkZrnWoyk9
-Zendesk will inform you when your trial account becomes a sponsored account.
 
 ## brew
 
