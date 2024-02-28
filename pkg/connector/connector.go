@@ -7,14 +7,21 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-zendesk/pkg/client"
 )
 
-type Connector struct{}
+type Connector struct {
+	orgs          []string
+	zendeskClient *client.ZendeskClient
+}
 
 // ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
 func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
 	return []connectorbuilder.ResourceSyncer{
-		newUserBuilder(),
+		groupBuilder(d.zendeskClient),
+		orgBuilder(d.zendeskClient, d.orgs),
+		roleBuilder(d.zendeskClient),
+		teamBuilder(d.zendeskClient),
 	}
 }
 
@@ -27,8 +34,8 @@ func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.R
 // Metadata returns metadata about the connector.
 func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
-		DisplayName: "My Baton Connector",
-		Description: "The template implementation of a baton connector",
+		DisplayName: "Zendesk Connector",
+		Description: "Connector syncing users, groups, and roles from Zendesk..",
 	}, nil
 }
 
@@ -39,6 +46,13 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context) (*Connector, error) {
-	return &Connector{}, nil
+func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string) (*Connector, error) {
+	zc, err := client.New(ctx, nil, subdomain, email, apiToken)
+	if err != nil {
+		return nil, err
+	}
+	return &Connector{
+		zendeskClient: zc,
+		orgs:          zendeskOrgs,
+	}, nil
 }
