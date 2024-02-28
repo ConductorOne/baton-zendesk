@@ -17,10 +17,11 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
   - manage team members
   - manage groups
   - manage organizations
-  - grant read resource
+  - grant resources
+  - revoke resources
 
 ## Getting a trial account
-For a trial Support account, see https://www.zendesk.com/register/free-trial/
+For a trial Support account, see 
 https://developer.zendesk.com/documentation/api-basics/getting-started/getting-a-trial-or-sponsored-account-for-development/#requesting-a-sponsored-test-account
 
 ## Requesting a sponsored test account
