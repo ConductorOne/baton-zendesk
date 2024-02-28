@@ -41,7 +41,7 @@ baton resources
 ## docker
 
 ```
-docker run --rm -v $(pwd):/out -e BATON_ZENDESK_CLIENT_ID=clientId BATON_ZENDESK_CLIENT_SECRET=clientSecret BATON_ENTERPRISE_ID=enterpriseId ghcr.io/conductorone/baton-zendesk:latest -f "/out/sync.c1z"
+docker run --rm -v $(pwd):/out -e BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken ghcr.io/conductorone/baton-zendesk:latest -f "/out/sync.c1z"
 docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c1z" resources
 ```
 
@@ -51,7 +51,7 @@ docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c
 go install github.com/conductorone/baton/cmd/baton@main
 go install github.com/conductorone/baton-zendesk/cmd/baton-zendesk@main
 
-BATON_CLIENT_ID=clientId BATON_CLIENT_SECRET=clientSecret BATON_ENTERPRISE_ID=enterpriseId 
+BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken 
 baton resources
 ```
 
