@@ -84,9 +84,9 @@ func getUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) 
 	var status v2.UserTrait_Status_Status
 	switch user.Suspended {
 	case true:
-		status = v2.UserTrait_Status_STATUS_ENABLED
-	case false:
 		status = v2.UserTrait_Status_STATUS_DISABLED
+	case false:
+		status = v2.UserTrait_Status_STATUS_ENABLED
 	default:
 		status = v2.UserTrait_Status_STATUS_UNSPECIFIED
 	}

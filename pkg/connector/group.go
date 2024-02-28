@@ -174,7 +174,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		zap.Int64("ID", membership.ID),
 		zap.Int64("UserID", membership.UserID),
 		zap.Int64("GroupID", membership.GroupID),
-		zap.String("CreatedAt", membership.CreatedAt.String()),
+		zap.Time("CreatedAt", membership.CreatedAt),
 	)
 
 	return nil, nil

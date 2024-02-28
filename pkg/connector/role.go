@@ -67,7 +67,6 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 	for supportRole := range getUserSupportRoles(users) {
 		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
 		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
-
 		rv = append(rv, permissionEn)
 	}
 
@@ -95,22 +94,27 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 
 	for _, user := range users {
 		userCopy := user
-		if isValidTeamMember(&userCopy) { // team member
-			resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
-			if err != nil {
-				return nil, "", nil, err
-			}
-			if user.CustomRoleID == resourceId {
-				ur, err := getUserRoleResource(&userCopy, resourceTypeTeam)
-				if err != nil {
-					return nil, "", nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
-				}
-
-				gr := grant.NewGrant(resource, user.Role, ur.Id)
-				tr := grant.NewGrant(ur, user.Role, resource.Id)
-				rv = append(rv, gr, tr)
-			}
+		if !isValidTeamMember(&userCopy) {
+			continue
 		}
+
+		resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
+		if err != nil {
+			return nil, "", nil, err
+		}
+
+		if user.CustomRoleID != resourceId {
+			continue
+		}
+
+		ur, err := getUserRoleResource(&userCopy, resourceTypeTeam)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
+		}
+
+		gr := grant.NewGrant(resource, user.Role, ur.Id)
+		tr := grant.NewGrant(ur, user.Role, resource.Id)
+		rv = append(rv, gr, tr)
 	}
 
 	return rv, nextPageToken, nil, nil
@@ -163,7 +167,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		zap.Int64("ID", membership.ID),
 		zap.String("Name", membership.Name),
 		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
-		zap.String("CreatedAt", membership.CreatedAt.String()),
+		zap.Time("CreatedAt", membership.CreatedAt),
 	)
 
 	return nil, nil

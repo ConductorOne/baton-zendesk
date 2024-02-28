@@ -78,25 +78,27 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 		members := getOrganizationMembers(org.ID, users)
 		for _, member := range members {
-			if member.OrganizationID == org.ID {
-				orgResource, err := rs.NewResource(
-					org.Name,
-					resourceTypeOrg,
-					org.ID,
-					rs.WithParentResourceID(parentResourceID),
-					rs.WithAnnotation(
-						&v2.ExternalLink{Url: org.URL},
-						&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
-						&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
-					),
-				)
-
-				if err != nil {
-					return nil, "", nil, err
-				}
-
-				ret = append(ret, orgResource)
+			if member.OrganizationID != org.ID {
+				continue
 			}
+
+			orgResource, err := rs.NewResource(
+				org.Name,
+				resourceTypeOrg,
+				org.ID,
+				rs.WithParentResourceID(parentResourceID),
+				rs.WithAnnotation(
+					&v2.ExternalLink{Url: org.URL},
+					&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
+					&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
+				),
+			)
+
+			if err != nil {
+				return nil, "", nil, err
+			}
+
+			ret = append(ret, orgResource)
 		}
 	}
 
@@ -194,7 +196,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 		zap.Int64("ID", oganizationMembership.ID),
 		zap.Int64("UserID", oganizationMembership.UserID),
 		zap.Int64("OganizationID", oganizationMembership.OrganizationID),
-		zap.String("CreatedAt", oganizationMembership.CreatedAt.String()),
+		zap.Time("CreatedAt", oganizationMembership.CreatedAt),
 	)
 
 	return nil, nil
