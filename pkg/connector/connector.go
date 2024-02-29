@@ -47,9 +47,13 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 
 // New returns a new instance of the connector.
 func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string) (*Connector, error) {
-	zc, err := client.New(ctx, nil, subdomain, email, apiToken)
-	if err != nil {
-		return nil, err
+	var zc *client.ZendeskClient
+	if apiToken != "" {
+		var err error
+		zc, err = client.New(ctx, nil, subdomain, email, apiToken)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Connector{
 		zendeskClient: zc,
