@@ -21,6 +21,8 @@ type roleResourceType struct {
 	client       *client.ZendeskClient
 }
 
+var users []zendesk.User
+
 func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return r.resourceType
 }
@@ -47,9 +49,10 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 
 func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		rv        []*v2.Entitlement
+		pageToken     int
+		err           error
+		rv            []*v2.Entitlement
+		nextPageToken string
 	)
 
 	if token.Token != "" {
@@ -59,9 +62,11 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		}
 	}
 
-	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
-	if err != nil {
-		return nil, "", nil, err
+	if len(users) == 0 {
+		users, nextPageToken, err = r.client.ListUsers(ctx, pageToken)
+		if err != nil {
+			return nil, "", nil, err
+		}
 	}
 
 	for supportRole := range getUserSupportRoles(users) {
@@ -75,9 +80,10 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 
 func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		rv        []*v2.Grant
+		pageToken     int
+		err           error
+		rv            []*v2.Grant
+		nextPageToken string
 	)
 
 	if token.Token != "" {
@@ -87,9 +93,11 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 		}
 	}
 
-	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
-	if err != nil {
-		return nil, "", nil, err
+	if len(users) == 0 {
+		users, nextPageToken, err = r.client.ListUsers(ctx, pageToken)
+		if err != nil {
+			return nil, "", nil, err
+		}
 	}
 
 	for _, user := range users {

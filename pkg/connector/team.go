@@ -60,9 +60,10 @@ func (t *teamResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 
 func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		ret       []*v2.Resource
+		pageToken     int
+		err           error
+		ret           []*v2.Resource
+		nextPageToken string
 	)
 	if pToken.Token != "" {
 		pageToken, err = strconv.Atoi(pToken.Token)
@@ -71,9 +72,11 @@ func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pT
 		}
 	}
 
-	users, nextPageToken, err := t.client.ListUsers(ctx, pageToken)
-	if err != nil {
-		return nil, "", nil, err
+	if len(users) == 0 {
+		users, nextPageToken, err = t.client.ListUsers(ctx, pageToken)
+		if err != nil {
+			return nil, "", nil, err
+		}
 	}
 
 	for _, user := range users {
