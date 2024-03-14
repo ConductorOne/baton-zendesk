@@ -62,12 +62,10 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		}
 	}
 
-	// if len(users) == 0 {
 	users, nextPageToken, err = r.client.ListUsers(ctx, pageToken)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	// }
 
 	for supportRole := range getUserSupportRoles(users) {
 		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)

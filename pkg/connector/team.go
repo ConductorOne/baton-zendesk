@@ -72,11 +72,9 @@ func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pT
 		}
 	}
 
-	if len(users) == 0 {
-		users, nextPageToken, err = t.client.ListUsers(ctx, pageToken)
-		if err != nil {
-			return nil, "", nil, err
-		}
+	users, nextPageToken, err = t.client.ListUsers(ctx, pageToken)
+	if err != nil {
+		return nil, "", nil, err
 	}
 
 	for _, user := range users {
