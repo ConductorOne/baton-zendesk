@@ -41,6 +41,7 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 		if err != nil {
 			return nil, "", nil, err
 		}
+
 		rv = append(rv, rr)
 	}
 
