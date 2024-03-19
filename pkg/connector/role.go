@@ -21,8 +21,6 @@ type roleResourceType struct {
 	client       *client.ZendeskClient
 }
 
-var users []zendesk.User
-
 func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 	return r.resourceType
 }
@@ -63,7 +61,7 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		}
 	}
 
-	users, nextPageToken, err = r.client.ListUsers(ctx, pageToken)
+	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -92,11 +90,9 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 		}
 	}
 
-	if len(users) == 0 {
-		users, nextPageToken, err = r.client.ListUsers(ctx, pageToken)
-		if err != nil {
-			return nil, "", nil, err
-		}
+	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
+	if err != nil {
+		return nil, "", nil, err
 	}
 
 	for _, user := range users {
