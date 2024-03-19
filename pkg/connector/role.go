@@ -39,6 +39,7 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 		if err != nil {
 			return nil, "", nil, err
 		}
+
 		rv = append(rv, rr)
 	}
 
@@ -47,9 +48,10 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 
 func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		rv        []*v2.Entitlement
+		pageToken     int
+		err           error
+		rv            []*v2.Entitlement
+		nextPageToken string
 	)
 
 	if token.Token != "" {
@@ -75,9 +77,10 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 
 func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		rv        []*v2.Grant
+		pageToken     int
+		err           error
+		rv            []*v2.Grant
+		nextPageToken string
 	)
 
 	if token.Token != "" {

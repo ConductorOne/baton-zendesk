@@ -1,7 +1,7 @@
 # `baton-zendesk` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-zendesk.svg)](https://pkg.go.dev/github.com/conductorone/baton-zendesk) ![main ci](https://github.com/conductorone/baton-zendesk/actions/workflows/main.yaml/badge.svg)
 `baton-zendesk` is a connector for Zendesk built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It communicates with the Zendesk API to sync data about users, groups and enterprise.
 
-Check out [Baton](https://github.com/conductorone/baton) to learn more the project in general.
+Check out [Baton](https://github.com/conductorone/baton) to learn more about the project in general.
 
 # Getting Started
 You can try out the Zendesk platform with a free, 14-day trial account. If you're interested in becoming a Zendesk developer partner, you can convert your trial account into a sponsored Zendesk Support account.
@@ -45,7 +45,7 @@ docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c
 go install github.com/conductorone/baton/cmd/baton@main
 go install github.com/conductorone/baton-zendesk/cmd/baton-zendesk@main
 
-BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken 
+BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken baton-zendesk
 baton resources
 ```
 

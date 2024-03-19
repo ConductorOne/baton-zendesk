@@ -55,6 +55,7 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 			return nil, err
 		}
 	}
+
 	return &Connector{
 		zendeskClient: zc,
 		orgs:          zendeskOrgs,
