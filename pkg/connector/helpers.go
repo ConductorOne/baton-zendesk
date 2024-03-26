@@ -176,6 +176,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 			userTraits = append(userTraits, rs.WithLastLogin(loginTime))
 		}
 	}
+
 	if user.CreatedAt.String() != "" {
 		createdAt, err := time.Parse("2006-01-02T15:04:05.000000Z", user.CreatedAt.String())
 		if err == nil {
@@ -184,7 +185,6 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	}
 
 	displayName := user.Name
-
 	if user.Name == "" {
 		displayName = user.Email
 	}
