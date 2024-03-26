@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -149,23 +150,46 @@ func getUserSupportRoles(users []zendesk.User) map[string]int64 {
 	return supportRoles
 }
 
-// getTeamResource creates a new connector resource for a GitHub Team. It is possible that the team has a parent resource.
-func getTeamResource(team *zendesk.User, resourceTypeTeam *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
+func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
+	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
+	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
-		"user_id":   team.ID,
-		"user_name": team.Name,
+		"login":      user.Email,
+		"first_name": firstName,
+		"last_name":  lastName,
+		"email":      user.Email,
+	}
+	if !user.Active || user.Suspended {
+		userStatus = v2.UserTrait_Status_STATUS_DISABLED
 	}
 
-	ret, err := rs.NewGroupResource(
-		team.Name,
-		resourceTypeTeam,
-		team.ID,
-		[]rs.GroupTraitOption{rs.WithGroupProfile(profile)},
-		rs.WithAnnotation(
-			&v2.V1Identifier{Id: fmt.Sprintf("team_member:%d", team.ID)},
-		),
-		rs.WithParentResourceID(parentResourceID),
-	)
+	userTraits := []rs.UserTraitOption{
+		rs.WithUserProfile(profile),
+		rs.WithStatus(userStatus),
+		rs.WithUserLogin(user.Email),
+		rs.WithEmail(user.Email, true),
+	}
+
+	if user.LastLoginAt.String() != "" {
+		loginTime, err := time.Parse("2006-01-02T15:04:05Z", user.LastLoginAt.String())
+		if err == nil {
+			userTraits = append(userTraits, rs.WithLastLogin(loginTime))
+		}
+	}
+
+	if user.CreatedAt.String() != "" {
+		createdAt, err := time.Parse("2006-01-02T15:04:05.000000Z", user.CreatedAt.String())
+		if err == nil {
+			userTraits = append(userTraits, rs.WithCreatedAt(createdAt))
+		}
+	}
+
+	displayName := user.Name
+	if user.Name == "" {
+		displayName = user.Email
+	}
+
+	ret, err := rs.NewUserResource(displayName, resourceTypeTeam, user.ID, userTraits)
 	if err != nil {
 		return nil, err
 	}
