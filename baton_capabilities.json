@@ -48,7 +48,7 @@
         "id":  "team_member",
         "displayName":  "Team Member",
         "traits":  [
-          "TRAIT_GROUP"
+          "TRAIT_USER"
         ],
         "annotations":  [
           {
