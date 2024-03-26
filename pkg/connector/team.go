@@ -81,7 +81,7 @@ func (t *teamResourceType) List(ctx context.Context, parentID *v2.ResourceId, pT
 		if !isValidTeamMember(&userCopy) {
 			continue
 		}
-		res, err := getTeamResource(&userCopy, resourceTypeTeam, parentID)
+		res, err := getTeamResource(&userCopy, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, err
 		}

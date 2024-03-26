@@ -25,7 +25,9 @@ var (
 	resourceTypeTeam = &v2.ResourceType{
 		Id:          "team_member",
 		DisplayName: "Team Member",
-		Traits:      []v2.ResourceType_Trait{v2.ResourceType_TRAIT_GROUP},
+		Traits: []v2.ResourceType_Trait{
+			v2.ResourceType_TRAIT_USER,
+		},
 		Annotations: v1AnnotationsForResourceType("team_member"),
 	}
 )
