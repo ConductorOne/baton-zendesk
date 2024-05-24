@@ -1,63 +1,63 @@
 {
-  "@type":  "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
-  "resourceTypeCapabilities":  [
+  "@type": "type.googleapis.com/c1.connector.v2.ConnectorCapabilities",
+  "resourceTypeCapabilities": [
     {
-      "resourceType":  {
-        "id":  "group",
-        "displayName":  "Group",
-        "traits":  [
+      "resourceType": {
+        "id": "group",
+        "displayName": "Group",
+        "traits": [
           "TRAIT_GROUP"
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC",
         "CAPABILITY_PROVISION"
       ]
     },
     {
-      "resourceType":  {
-        "id":  "org",
-        "displayName":  "Org",
-        "annotations":  [
+      "resourceType": {
+        "id": "org",
+        "displayName": "Org",
+        "annotations": [
           {
-            "@type":  "type.googleapis.com/c1.connector.v2.V1Identifier",
-            "id":  "org"
+            "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
+            "id": "org"
           }
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC",
         "CAPABILITY_PROVISION"
       ]
     },
     {
-      "resourceType":  {
-        "id":  "role",
-        "displayName":  "Role",
-        "traits":  [
+      "resourceType": {
+        "id": "role",
+        "displayName": "Role",
+        "traits": [
           "TRAIT_ROLE"
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC",
         "CAPABILITY_PROVISION"
       ]
     },
     {
-      "resourceType":  {
-        "id":  "team_member",
-        "displayName":  "Team Member",
-        "traits":  [
+      "resourceType": {
+        "id": "team_member",
+        "displayName": "Team Member",
+        "traits": [
           "TRAIT_USER"
         ],
-        "annotations":  [
+        "annotations": [
           {
-            "@type":  "type.googleapis.com/c1.connector.v2.V1Identifier",
-            "id":  "team_member"
+            "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
+            "id": "team_member"
           }
         ]
       },
-      "capabilities":  [
+      "capabilities": [
         "CAPABILITY_SYNC"
       ]
     }
