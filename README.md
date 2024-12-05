@@ -86,6 +86,7 @@ Flags:
   -h, --help                   help for baton-zendesk
       --log-format string      The output format for logs: json, console ($BATON_LOG_FORMAT) (default "json")
       --log-level string       The log level: debug, info, warn, error ($BATON_LOG_LEVEL) (default "info")
+      --orgs strings           Limit syncing to specific organizations. ($BATON_ORGS)
   -p, --provisioning           This must be set in order for provisioning actions to be enabled. ($BATON_PROVISIONING)
       --subdomain string       The Zendesk subdomain. ($BATON_SUBDOMAIN)
   -v, --version                version for baton-zendesk
