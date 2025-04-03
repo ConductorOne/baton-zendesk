@@ -36,7 +36,7 @@ builds:
     hooks:
       post:
         - gon .gon-arm64.json
-        - mv dist/baton-zendesk-darwin-arm64.signed.zip dist/macos-arm64_darwin_arm64/baton-zendesk
+        - mv dist/baton-zendesk-darwin-arm64.signed.zip dist/macos-arm64_darwin_arm64_v8.0/baton-zendesk
 archives:
   - id: linux-archive
     builds:
