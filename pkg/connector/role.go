@@ -19,6 +19,7 @@ import (
 type roleResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
+	connector    *Connector
 }
 
 func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -48,20 +49,11 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, to
 
 func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
 	var (
-		pageToken     int
-		err           error
-		rv            []*v2.Entitlement
-		nextPageToken string
+		err error
+		rv  []*v2.Entitlement
 	)
 
-	if token.Token != "" {
-		pageToken, err = strconv.Atoi(token.Token)
-		if err != nil {
-			return nil, "", nil, err
-		}
-	}
-
-	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
+	users, err := r.connector.cacheUsers(ctx)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -72,34 +64,22 @@ func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resour
 		rv = append(rv, permissionEn)
 	}
 
-	return rv, nextPageToken, nil, nil
+	return rv, "", nil, nil
 }
 
 func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var (
-		pageToken     int
-		err           error
-		rv            []*v2.Grant
-		nextPageToken string
+		err error
+		rv  []*v2.Grant
 	)
 
-	if token.Token != "" {
-		pageToken, err = strconv.Atoi(token.Token)
-		if err != nil {
-			return nil, "", nil, err
-		}
-	}
-
-	users, nextPageToken, err := r.client.ListUsers(ctx, pageToken)
+	users, err := r.connector.cacheUsers(ctx)
 	if err != nil {
 		return nil, "", nil, err
 	}
 
 	for _, user := range users {
 		userCopy := user
-		if !isValidTeamMember(&userCopy) {
-			continue
-		}
 
 		resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 		if err != nil {
@@ -116,11 +96,10 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, to
 		}
 
 		gr := grant.NewGrant(resource, user.Role, ur.Id)
-		tr := grant.NewGrant(ur, user.Role, resource.Id)
-		rv = append(rv, gr, tr)
+		rv = append(rv, gr)
 	}
 
-	return rv, nextPageToken, nil, nil
+	return rv, "", nil, nil
 }
 
 func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
@@ -180,9 +159,10 @@ func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotat
 	return nil, nil
 }
 
-func roleBuilder(c *client.ZendeskClient) *roleResourceType {
+func roleBuilder(c *client.ZendeskClient, connector *Connector) *roleResourceType {
 	return &roleResourceType{
 		resourceType: resourceTypeRole,
 		client:       c,
+		connector:    connector,
 	}
 }

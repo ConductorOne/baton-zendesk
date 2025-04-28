@@ -15,6 +15,9 @@ import (
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
+const teamMembersRoleAdmin = "admin"
+const teamMembersRoleAgent = "agent"
+
 type ZendeskClient struct {
 	client *zendesk.Client
 }
@@ -38,6 +41,7 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken int) ([]zendesk.User, string, error) {
 	var nextPageToken string
 	users, page, err := z.client.GetUsers(ctx, &zendesk.UserListOptions{
+		Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}, // exclude end-users
 		PageOptions: zendesk.PageOptions{
 			Page: pageToken,
 		},
@@ -81,7 +85,7 @@ func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken int) ([]zendes
 // ListOrganizations fetch organization list.
 func (z *ZendeskClient) ListOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, string, error) {
 	var nextPageToken string
-	orgs, page, err := z.client.GetOrganizations(ctx, &zendesk.OrganizationListOptions{})
+	orgs, page, err := z.client.GetOrganizations(ctx, opts)
 	if err != nil {
 		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
@@ -183,7 +187,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		return nil, "", err
 	}
 
-	users, page, err := z.client.GetOrganizationUsers(ctx, oID, nil)
+	users, page, err := z.client.GetOrganizationUsers(ctx, oID, opts)
 
 	if err != nil {
 		return nil, "", err

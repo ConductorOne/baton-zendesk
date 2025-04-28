@@ -2,13 +2,11 @@ package connector
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/nukosuke/go-zendesk/zendesk"
@@ -23,36 +21,6 @@ func v1AnnotationsForResourceType(resourceTypeID string) annotations.Annotations
 	})
 
 	return annos
-}
-
-func parsePageToken(i string, resourceID *v2.ResourceId) (*pagination.Bag, int, error) {
-	b := &pagination.Bag{}
-	err := b.Unmarshal(i)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if b.Current() == nil {
-		b.Push(pagination.PageState{
-			ResourceTypeID: resourceID.ResourceType,
-			ResourceID:     resourceID.Resource,
-		})
-	}
-
-	page, err := convertPageToken(b.PageToken())
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return b, page, nil
-}
-
-// convertPageToken converts a string token into an int.
-func convertPageToken(token string) (int, error) {
-	if token == "" {
-		return 0, nil
-	}
-	return strconv.Atoi(token)
 }
 
 func titleCase(s string) string {
@@ -130,7 +98,7 @@ func splitFullName(name string) (string, string) {
 
 // isValidTeamMember checks team members.
 func isValidTeamMember(user *zendesk.User) bool {
-	if user.Role == "agent" || user.Role == "admin" && !user.Suspended { // team member
+	if !user.Suspended { // team member
 		return true
 	}
 
@@ -151,7 +119,7 @@ func getUserSupportRoles(users []zendesk.User) map[string]int64 {
 }
 
 func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
-	var userStatus v2.UserTrait_Status_Status = v2.UserTrait_Status_STATUS_ENABLED
+	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
 		"login":      user.Email,

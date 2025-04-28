@@ -24,6 +24,7 @@ const (
 type groupResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
+	connector    *Connector
 }
 
 var groupEntitlementAccessLevels = []string{
@@ -90,14 +91,11 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		return nil, "", nil, err
 	}
 
-	opts := zendesk.UserListOptions{
-		Roles: []string{
-			"admin",
-			"agent",
-		},
+	users, err := g.connector.cacheUsers(ctx)
+	mapUsers := make(map[int64]zendesk.User)
+	for _, user := range users {
+		mapUsers[user.ID] = user
 	}
-
-	users, _, err := g.client.GetUsers(ctx, &opts)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -108,7 +106,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 	}
 
 	for _, group := range groupMemberships {
-		userAccountDetail := getUserByID(group.UserID, users)
+		userAccountDetail := getUserByID(group.UserID, mapUsers)
 		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
@@ -221,9 +219,10 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	return nil, nil
 }
 
-func groupBuilder(c *client.ZendeskClient) *groupResourceType {
+func groupBuilder(cli *client.ZendeskClient, con *Connector) *groupResourceType {
 	return &groupResourceType{
 		resourceType: resourceTypeGroup,
-		client:       c,
+		client:       cli,
+		connector:    con,
 	}
 }
