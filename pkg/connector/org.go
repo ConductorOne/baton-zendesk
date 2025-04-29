@@ -25,13 +25,11 @@ type orgResourceType struct {
 }
 
 const (
-	orgRoleMember = "end-user"
-	orgRoleAdmin  = "admin"
-	orgRoleAgent  = "agent"
+	orgRoleAdmin = "admin"
+	orgRoleAgent = "agent"
 )
 
 var orgAccessLevels = []string{
-	orgRoleMember,
 	orgRoleAdmin,
 	orgRoleAgent,
 }
@@ -42,15 +40,22 @@ func (o *orgResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 
 // List returns all the organizations from the database as resource objects.
 func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-	var ret []*v2.Resource
-	_, page, err := parsePageToken(pToken.Token, &v2.ResourceId{ResourceType: resourceTypeOrg.Id})
-	if err != nil {
-		return nil, "", nil, err
+	var (
+		ret       []*v2.Resource
+		pageToken int
+		err       error
+	)
+
+	if pToken != nil && pToken.Token != "" {
+		pageToken, err = strconv.Atoi(pToken.Token)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("zendesk-connector: failed to parse org page token: %w", err)
+		}
 	}
 
 	opts := &zendesk.OrganizationListOptions{
 		PageOptions: zendesk.PageOptions{
-			Page:    page,
+			Page:    pageToken,
 			PerPage: pToken.Size,
 		},
 	}
@@ -122,15 +127,26 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 }
 
 func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	var rv []*v2.Grant
-	_, page, err := parsePageToken(pToken.Token, resource.Id)
-	if err != nil {
-		return nil, "", nil, err
+	var (
+		rv        []*v2.Grant
+		err       error
+		pageToken int
+	)
+
+	if pToken != nil && pToken.Token != "" {
+		pageToken, err = strconv.Atoi(pToken.Token)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("zendesk-connector: failed to parse org page token: %w", err)
+		}
 	}
 
 	opts := zendesk.UserListOptions{
+		Roles: []string{
+			orgRoleAdmin,
+			orgRoleAgent,
+		},
 		PageOptions: zendesk.PageOptions{
-			Page:    page,
+			Page:    pageToken,
 			PerPage: pToken.Size,
 		},
 	}
@@ -147,7 +163,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 
 		roleName := strings.ToLower(user.Role)
 		switch roleName {
-		case orgRoleAdmin, orgRoleMember, orgRoleAgent:
+		case orgRoleAdmin, orgRoleAgent:
 			rv = append(rv, grant.NewGrant(resource, roleName, ur.Id, grant.WithAnnotation(&v2.V1Identifier{
 				Id: fmt.Sprintf("org-grant:%s:%d:%s", resource.Id.Resource, user.ID, roleName),
 			})))
