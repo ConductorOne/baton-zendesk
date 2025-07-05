@@ -101,14 +101,22 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, opts *zendesk.Org
 }
 
 // GetGroupMemberships get the memberships of the specified group.
-func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64) ([]zendesk.GroupMembership, string, error) {
+func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, pageToken string) ([]zendesk.GroupMembership, string, error) {
 	var nextPageToken string
+
+	pageOptions, err := parsePageOptions(pageToken)
+	if err != nil {
+		return nil, "", err
+	}
+
 	groupMemberships, page, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
-		GroupID: groupId,
+		GroupID:     groupId,
+		PageOptions: pageOptions,
 	})
 	if err != nil {
 		return nil, "", err
 	}
+
 	if page.NextPage != nil {
 		nextPageToken, err = parseNextPage(*page.NextPage)
 		if err != nil {
@@ -205,10 +213,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 
 // GetOrganizationMemberships fetch organization memberships.
 func (z *ZendeskClient) GetOrganizationMemberships(ctx context.Context, opts *zendesk.OrganizationMembershipListOptions) ([]zendesk.OrganizationMembership, zendesk.Page, error) {
-	orgMemberships, _, err := z.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
-		PageOptions:    zendesk.PageOptions{},
-		OrganizationID: opts.OrganizationID,
-	})
+	orgMemberships, _, err := z.client.GetOrganizationMemberships(ctx, opts)
 	if err != nil {
 		return nil, zendesk.Page{}, err
 	}
@@ -406,6 +411,21 @@ func parseNextPage(u string) (string, error) {
 		return "", errors.New("invalid page token")
 	}
 	return nextPageToken, nil
+}
+
+func parsePageOptions(pageToken string) (zendesk.PageOptions, error) {
+	if pageToken == "" {
+		return zendesk.PageOptions{}, nil
+	}
+
+	pageInt, err := strconv.Atoi(pageToken)
+	if err != nil {
+		return zendesk.PageOptions{}, fmt.Errorf("failed to parse page token: %w", err)
+	}
+
+	return zendesk.PageOptions{
+		Page: pageInt,
+	}, nil
 }
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org

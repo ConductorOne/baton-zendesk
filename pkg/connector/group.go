@@ -100,7 +100,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		return nil, "", nil, err
 	}
 
-	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId))
+	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), token.Token)
 	if err != nil {
 		return nil, "", nil, err
 	}
