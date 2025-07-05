@@ -205,18 +205,6 @@ func getUserByID(userID int64, users map[int64]zendesk.User) zendesk.User {
 	return zendesk.User{}
 }
 
-// getOrganizationMembers gets organization members.
-func getOrganizationMembers(orgID int64, users map[int64]zendesk.User) []zendesk.User {
-	var members []zendesk.User
-	for _, user := range users {
-		if user.OrganizationID == orgID {
-			members = append(members, user)
-		}
-	}
-
-	return members
-}
-
 // getRoleResource creates a new connector resource for a Zendesk role.
 func getRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	profile := map[string]interface{}{

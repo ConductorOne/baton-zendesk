@@ -21,7 +21,7 @@ import (
 type orgResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	orgs         map[string]struct{}
+	filterToOrgs map[string]struct{}
 }
 
 const (
@@ -65,46 +65,28 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
 
-	optsOrg := zendesk.UserListOptions{
-		Roles: []string{
-			"admin",
-		},
-	}
-
-	users, _, err := o.client.GetUsers(ctx, &optsOrg)
-	if err != nil {
-		return nil, "", nil, err
-	}
-
 	for _, org := range orgs {
-		if _, ok := o.orgs[org.Name]; !ok && len(o.orgs) > 0 {
+		// If we have a filter, and the org is not in the filter, skip it
+		if _, ok := o.filterToOrgs[org.Name]; !ok && len(o.filterToOrgs) > 0 {
 			continue
 		}
 
-		members := getOrganizationMembers(org.ID, users)
-		for _, member := range members {
-			if member.OrganizationID != org.ID {
-				continue
-			}
-
-			orgResource, err := rs.NewResource(
-				org.Name,
-				resourceTypeOrg,
-				org.ID,
-				rs.WithParentResourceID(parentResourceID),
-				rs.WithAnnotation(
-					&v2.ExternalLink{Url: org.URL},
-					&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
-					&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
-				),
-			)
-
-			if err != nil {
-				return nil, "", nil, err
-			}
-
-			ret = append(ret, orgResource)
+		orgResource, err := rs.NewResource(
+			org.Name,
+			resourceTypeOrg,
+			org.ID,
+			rs.WithParentResourceID(parentResourceID),
+			rs.WithAnnotation(
+				&v2.ExternalLink{Url: org.URL},
+				&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
+				&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
+			),
+		)
+		if err != nil {
+			return nil, "", nil, err
 		}
+
+		ret = append(ret, orgResource)
 	}
 
 	return ret, nextPageToken, nil, nil
@@ -268,7 +250,7 @@ func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
 
 	return &orgResourceType{
 		resourceType: resourceTypeOrg,
-		orgs:         orgMap,
+		filterToOrgs: orgMap,
 		client:       c,
 	}
 }
