@@ -459,3 +459,39 @@ func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 
 	return customRole, nil
 }
+
+func (z *ZendeskClient) CreateUser(ctx context.Context, name, email, role string) (*zendesk.User, error) {
+	if role != teamMembersRoleAdmin && role != teamMembersRoleAgent {
+		// def role
+		role = teamMembersRoleAgent
+	}
+
+	user := zendesk.User{
+		Name:  name,
+		Email: email,
+		Role:  role,
+	}
+	createdUser, err := z.client.CreateUser(ctx, user)
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to create user: %w", err)
+	}
+
+	return &createdUser, nil
+}
+
+// DeleteUser soft deletes a user in Zendesk by suspending them.
+func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
+	// Zendesk doesn't have a direct delete method, so we suspend the user instead
+	user := zendesk.User{
+		ID:        userID,
+		Suspended: true,
+		Active:    false,
+	}
+
+	_, err := z.client.UpdateUser(ctx, userID, user)
+	if err != nil {
+		return fmt.Errorf("zendesk-connector: failed to suspend/deactivate user %d: %w", userID, err)
+	}
+
+	return nil
+}
