@@ -106,9 +106,6 @@ func (c *C1FileAttached) getTableColumns(ctx context.Context, tableName string) 
 			columns = append(columns, name)
 		}
 	}
-	if rows.Err() != nil {
-		return nil, rows.Err()
-	}
 
 	return columns, nil
 }
