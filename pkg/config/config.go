@@ -25,10 +25,19 @@ var (
 		field.WithDescription("Limit syncing to specific organizations"),
 	)
 
-	Configuration = field.NewConfiguration([]field.SchemaField{
+	ConfigurationFields = []field.SchemaField{
 		SubdomainField,
 		ApiTokenField,
 		EmailField,
 		OrgsField,
-	})
+	}
+)
+
+//go:generate go run ./gen
+var (
+	Config = field.NewConfiguration(ConfigurationFields,
+		field.WithConnectorDisplayName("Zendesk"),
+		field.WithHelpUrl("/docs/baton/zendesk"),
+		field.WithIconUrl("/static/app-icons/zendesk.svg"),
+	)
 )

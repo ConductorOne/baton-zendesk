@@ -10,7 +10,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types"
 	"github.com/conductorone/baton-zendesk/pkg/config"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 
 	"github.com/conductorone/baton-zendesk/pkg/connector"
@@ -28,7 +27,7 @@ func main() {
 		ctx,
 		connectorName,
 		getConnector,
-		config.Configuration,
+		config.Config,
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -44,15 +43,15 @@ func main() {
 	}
 }
 
-func getConnector(ctx context.Context, v *viper.Viper) (types.ConnectorServer, error) {
+func getConnector(ctx context.Context, cfg *config.Zendesk) (types.ConnectorServer, error) {
 	logger := ctxzap.Extract(ctx)
 
 	cb, err := connector.New(
 		ctx,
-		v.GetStringSlice(config.OrgsField.FieldName),
-		v.GetString(config.SubdomainField.FieldName),
-		v.GetString(config.EmailField.FieldName),
-		v.GetString(config.ApiTokenField.FieldName),
+		cfg.GetStringSlice(config.OrgsField.FieldName),
+		cfg.GetString(config.SubdomainField.FieldName),
+		cfg.GetString(config.EmailField.FieldName),
+		cfg.GetString(config.ApiTokenField.FieldName),
 	)
 	if err != nil {
 		logger.Error("error creating connector", zap.Error(err))
