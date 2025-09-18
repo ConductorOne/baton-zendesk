@@ -48,10 +48,10 @@ func getConnector(ctx context.Context, cfg *config.Zendesk) (types.ConnectorServ
 
 	cb, err := connector.New(
 		ctx,
-		cfg.GetStringSlice(config.OrgsField.FieldName),
-		cfg.GetString(config.SubdomainField.FieldName),
-		cfg.GetString(config.EmailField.FieldName),
-		cfg.GetString(config.ApiTokenField.FieldName),
+		cfg.Orgs,
+		cfg.Subdomain,
+		cfg.Email,
+		cfg.ApiToken,
 	)
 	if err != nil {
 		logger.Error("error creating connector", zap.Error(err))
