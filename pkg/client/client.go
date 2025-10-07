@@ -459,3 +459,62 @@ func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 
 	return customRole, nil
 }
+
+// CreateUser creates a new user.
+//
+// Allowed for: Admins or agents with permission to manage team members
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#create-user
+func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zendesk.User, error) {
+	return z.client.CreateUser(ctx, user)
+}
+
+// UpdateUser updates an existing user (by queueing a job).
+//
+// Allowed for: Admins or agents with permission to edit end-user profiles
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
+func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, user zendesk.User) (zendesk.User, error) {
+	return z.client.UpdateUser(ctx, userID, user)
+}
+
+// DeleteUser soft deletes a user.
+//
+// Allowed for: Admins or agents with access to all tickets
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#delete-user
+func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
+	err := z.client.Delete(ctx, fmt.Sprintf("/users/%d.json", userID))
+	if err != nil {
+		if zErr, ok := err.(zendesk.Error); ok {
+			if zErr.Status() == http.StatusOK {
+				return nil
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// PermanentlyDeleteUser permanently deletes a soft deleted user.
+//
+// Allowed for: Admins or agents with access to all tickets
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
+func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
+	err := z.client.Delete(ctx, fmt.Sprintf("/deleted_users/%d.json", userID))
+	if err != nil {
+		if zErr, ok := err.(zendesk.Error); ok {
+			if zErr.Status() == http.StatusOK {
+				return nil
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+// GetZendeskClient returns the underlying zendesk client.
+func (z *ZendeskClient) GetZendeskClient() *zendesk.Client {
+	return z.client
+}

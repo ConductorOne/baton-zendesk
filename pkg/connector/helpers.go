@@ -96,21 +96,11 @@ func splitFullName(name string) (string, string) {
 	return firstName, lastName
 }
 
-// isValidTeamMember checks team members.
-func isValidTeamMember(user *zendesk.User) bool {
-	if !user.Suspended { // team member
-		return true
-	}
-
-	return false
-}
-
 // getUserSupportRoles gets user roles.
 func getUserSupportRoles(users []zendesk.User) map[string]int64 {
 	var supportRoles = make(map[string]int64)
 	for _, user := range users {
-		userCopy := user
-		if isValidTeamMember(&userCopy) { // only team member
+		if !user.Suspended {
 			supportRoles[user.Role] = user.ID
 		}
 	}
