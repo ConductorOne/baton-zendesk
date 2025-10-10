@@ -478,6 +478,33 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, user zende
 	return z.client.UpdateUser(ctx, userID, user)
 }
 
+// UpdateUserHttp updates a user via direct HTTP PUT request.
+//
+// This function is only used for enable_user action due to a bug in the Zendesk SDK
+// where the Suspended field has an omitempty JSON tag, preventing unsuspending users
+// (setting suspended=false) through the standard UpdateUser method.
+//
+// Allowed for: Admins or agents with permission to edit end-user profiles
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
+func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payload map[string]interface{}) (zendesk.User, error) {
+	responseBody, err := z.client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	var response struct {
+		User zendesk.User `json:"user"`
+	}
+
+	err = json.Unmarshal(responseBody, &response)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	return response.User, nil
+}
+
 // DeleteUser soft deletes a user.
 //
 // Allowed for: Admins or agents with access to all tickets
