@@ -111,6 +111,8 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 		return nil, fmt.Errorf("failed to parse user ID: %w", err)
 	}
 
+	// DeleteUser will return an error when successful (yes, really)
+	// see: vendor/github.com/nukosuke/go-zendesk/zendesk/zendesk.go Line:279
 	err = t.client.DeleteUser(ctx, userID)
 	if err != nil {
 		var zErr zendesk.Error
@@ -121,15 +123,15 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 		}
 	}
 
+	// This one also returns an error on success
 	err = t.client.PermanentlyDeleteUser(ctx, userID)
 	if err != nil {
 		var zErr zendesk.Error
 		if errors.As(err, &zErr) {
 			if zErr.Status() == http.StatusUnprocessableEntity {
-				return nil, nil
+				return nil, fmt.Errorf("user %s is not in the deleted state, cannot permanently delete: %w", resourceId.Resource, err)
 			}
 		}
-		return nil, fmt.Errorf("failed to permanently delete user %s: %w", resourceId.Resource, err)
 	}
 
 	return nil, nil

@@ -110,7 +110,7 @@ func (c *Connector) handleDisableUser(
 
 	l.Debug("disabling user", zap.Int64("user_id", userID))
 
-	// Get the current user to preserve required fields like Name
+	// required to get the current user's name
 	currentUser, err := c.zendeskClient.GetUser(ctx, userID)
 	if err != nil {
 		var zErr *zendesk.Error
@@ -127,14 +127,12 @@ func (c *Connector) handleDisableUser(
 		}, nil, err
 	}
 
-	// Modify the suspended field on the existing user object
 	body := map[string]any{
 		"user": map[string]any{
 			"name":      currentUser.Name,
 			"suspended": true,
 		},
 	}
-
 	updatedUser, err := UpdateUser(ctx, c.zendeskClient.GetZendeskClient(), userID, body)
 	if err != nil {
 		var zErr *zendesk.Error
@@ -151,21 +149,11 @@ func (c *Connector) handleDisableUser(
 		}, nil, err
 	}
 
-	if !updatedUser.Suspended {
-		return &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: "Failed to disable user"}},
-			},
-		}, nil, err
-	}
-
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			"success":   {Kind: &structpb.Value_BoolValue{BoolValue: true}},
-			"message":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d disabled successfully", userID)}},
-			"user_id":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", updatedUser.ID)}},
-			"suspended": {Kind: &structpb.Value_BoolValue{BoolValue: updatedUser.Suspended}},
+			"success": {Kind: &structpb.Value_BoolValue{BoolValue: true}},
+			"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d disabled successfully", userID)}},
+			"user_id": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", updatedUser.ID)}},
 		},
 	}, nil, nil
 }
@@ -212,15 +200,16 @@ func (c *Connector) handleEnableUser(
 		return nil, nil, fmt.Errorf("invalid user_id format: %w", err)
 	}
 
-	l.Debug("enabling user", zap.Int64("user_id", userID))
+	l.Debug("disabling user with direct HTTP", zap.Int64("user_id", userID))
 
+	client := c.zendeskClient.GetZendeskClient()
 	payload := map[string]interface{}{
 		"user": map[string]interface{}{
 			"suspended": false,
 		},
 	}
 
-	updatedUser, err := c.zendeskClient.UpdateUserHttp(ctx, userID, payload)
+	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
@@ -231,19 +220,37 @@ func (c *Connector) handleEnableUser(
 		return &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to enable user: %v", err)}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to disable user: %v", err)}},
 			},
 		}, nil, err
 	}
 
-	l.Info("user enabled successfully", zap.Int64("user_id", userID), zap.Bool("suspended", updatedUser.Suspended))
+	// Parse response to extract suspended field
+	var response struct {
+		User struct {
+			ID        int64 `json:"id"`
+			Suspended bool  `json:"suspended"`
+		} `json:"user"`
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		l.Error("failed to parse response", zap.Error(err))
+		return &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to parse response: %v", err)}},
+			},
+		}, nil, err
+	}
+
+	l.Info("user enabled successfully", zap.Int64("user_id", userID), zap.Bool("suspended", response.User.Suspended))
 
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			"success":   {Kind: &structpb.Value_BoolValue{BoolValue: true}},
-			"message":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d enabled successfully", userID)}},
-			"user_id":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", updatedUser.ID)}},
-			"suspended": {Kind: &structpb.Value_BoolValue{BoolValue: updatedUser.Suspended}},
+			"success": {Kind: &structpb.Value_BoolValue{BoolValue: true}},
+			"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d enabled successfully", userID)}},
+			"user_id": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", response.User.ID)}},
 		},
 	}, nil, nil
 }
