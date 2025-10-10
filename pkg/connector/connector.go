@@ -84,7 +84,7 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
 				"name": {
 					DisplayName: "Name",
-					Required:    false,
+					Required:    true,
 					Description: "The name of the user.",
 					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
 						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
