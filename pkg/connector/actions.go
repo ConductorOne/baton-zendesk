@@ -200,7 +200,7 @@ func (c *Connector) handleEnableUser(
 		return nil, nil, fmt.Errorf("invalid user_id format: %w", err)
 	}
 
-	l.Debug("disabling user with direct HTTP", zap.Int64("user_id", userID))
+	l.Debug("enabling user", zap.Int64("user_id", userID))
 
 	client := c.zendeskClient.GetZendeskClient()
 	payload := map[string]interface{}{
@@ -208,7 +208,6 @@ func (c *Connector) handleEnableUser(
 			"suspended": false,
 		},
 	}
-
 	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
 	if err != nil {
 		var zErr *zendesk.Error
@@ -220,19 +219,17 @@ func (c *Connector) handleEnableUser(
 		return &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to disable user: %v", err)}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to enable user: %v", err)}},
 			},
 		}, nil, err
 	}
 
-	// Parse response to extract suspended field
 	var response struct {
 		User struct {
 			ID        int64 `json:"id"`
 			Suspended bool  `json:"suspended"`
 		} `json:"user"`
 	}
-
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		l.Error("failed to parse response", zap.Error(err))
