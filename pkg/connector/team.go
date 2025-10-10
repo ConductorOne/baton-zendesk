@@ -59,7 +59,7 @@ func (o *teamResourceType) Grants(ctx context.Context, resource *v2.Resource, pT
 func (t *teamResourceType) CreateAccount(
 	ctx context.Context,
 	accountInfo *v2.AccountInfo,
-	credentialOptions *v2.CredentialOptions,
+	credentialOptions *v2.LocalCredentialOptions,
 ) (
 	connectorbuilder.CreateAccountResponse,
 	[]*v2.PlaintextData,
