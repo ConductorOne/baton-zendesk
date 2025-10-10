@@ -77,6 +77,40 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 	return &v2.ConnectorMetadata{
 		DisplayName: "Zendesk Connector",
 		Description: "Connector syncing users, groups, and roles from Zendesk..",
+		AccountCreationSchema: &v2.ConnectorAccountCreationSchema{
+			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
+				"name": {
+					DisplayName: "Name",
+					Required:    false,
+					Description: "The name of the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "Name",
+					Order:       1,
+				},
+				"email": {
+					DisplayName: "Email",
+					Required:    false,
+					Description: "The email of the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "Email",
+					Order:       2,
+				},
+				"role": {
+					DisplayName: "Role",
+					Required:    false,
+					Description: "The role of the user.",
+					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
+						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
+					},
+					Placeholder: "Role",
+					Order:       3,
+				},
+			},
+		},
 	}, nil
 }
 

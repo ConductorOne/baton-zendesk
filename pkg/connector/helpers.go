@@ -112,6 +112,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
+		"user_id":    fmt.Sprint(user.ID),
 		"login":      user.Email,
 		"first_name": firstName,
 		"last_name":  lastName,

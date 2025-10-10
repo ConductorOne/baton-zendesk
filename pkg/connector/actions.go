@@ -2,7 +2,9 @@ package connector
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strconv"
 
 	config_sdk "github.com/conductorone/baton-sdk/pb/c1/config/v1"
@@ -11,6 +13,7 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
+	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -108,13 +111,33 @@ func (c *Connector) handleDisableUser(
 
 	currentUser, err := c.zendeskClient.GetUser(ctx, userID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get user: %w", err)
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			body, _ := io.ReadAll(zErr.Body())
+			l.Error("failed to get user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
+		}
+		l.Error("failed to get user", zap.Int64("user_id", userID), zap.Error(err))
+		return &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to get user: %v", err)}},
+			},
+		}, nil, err
 	}
 
-	currentUser.Suspended = true
+	user := zendesk.User{
+		Name:      currentUser.Name,
+		Suspended: true,
+	}
 
-	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, currentUser)
+	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, user)
 	if err != nil {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			body, _ := io.ReadAll(zErr.Body())
+			l.Error("failed to disable user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
+		}
+		l.Error("failed to disable user", zap.Int64("user_id", userID), zap.Error(err))
 		return &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
@@ -167,13 +190,33 @@ func (c *Connector) handleEnableUser(
 
 	currentUser, err := c.zendeskClient.GetUser(ctx, userID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get user: %w", err)
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			body, _ := io.ReadAll(zErr.Body())
+			l.Error("failed to get user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
+		}
+		l.Error("failed to get user", zap.Int64("user_id", userID), zap.Error(err))
+		return &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to get user: %v", err)}},
+			},
+		}, nil, err
 	}
 
-	currentUser.Suspended = false
+	user := zendesk.User{
+		Name:      currentUser.Name,
+		Suspended: false,
+	}
 
-	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, currentUser)
+	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, user)
 	if err != nil {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			body, _ := io.ReadAll(zErr.Body())
+			l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
+		}
+		l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Error(err))
 		return &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},

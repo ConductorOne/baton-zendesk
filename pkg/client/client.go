@@ -486,7 +486,8 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, user zende
 func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf("/users/%d.json", userID))
 	if err != nil {
-		if zErr, ok := err.(zendesk.Error); ok {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
@@ -504,7 +505,8 @@ func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf("/deleted_users/%d.json", userID))
 	if err != nil {
-		if zErr, ok := err.(zendesk.Error); ok {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
@@ -514,7 +516,6 @@ func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64)
 	return nil
 }
 
-// GetZendeskClient returns the underlying zendesk client.
 func (z *ZendeskClient) GetZendeskClient() *zendesk.Client {
 	return z.client
 }
