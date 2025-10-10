@@ -22,6 +22,9 @@ type Connector struct {
 	cachedUsers    []zendesk.User
 	cacheTimestamp time.Time
 	usersMtx       sync.Mutex
+	subdomain      string
+	email          string
+	apiToken       string
 }
 
 func (c *Connector) cacheUsers(ctx context.Context) ([]zendesk.User, error) {
@@ -134,5 +137,8 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 	return &Connector{
 		zendeskClient: zc,
 		orgs:          zendeskOrgs,
+		subdomain:     subdomain,
+		email:         email,
+		apiToken:      apiToken,
 	}, nil
 }

@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -109,6 +110,7 @@ func (c *Connector) handleDisableUser(
 
 	l.Debug("disabling user", zap.Int64("user_id", userID))
 
+	// Get the current user to preserve required fields like Name
 	currentUser, err := c.zendeskClient.GetUser(ctx, userID)
 	if err != nil {
 		var zErr *zendesk.Error
@@ -125,12 +127,15 @@ func (c *Connector) handleDisableUser(
 		}, nil, err
 	}
 
-	user := zendesk.User{
-		Name:      currentUser.Name,
-		Suspended: true,
+	// Modify the suspended field on the existing user object
+	body := map[string]any{
+		"user": map[string]any{
+			"name":      currentUser.Name,
+			"suspended": true,
+		},
 	}
 
-	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, user)
+	updatedUser, err := UpdateUser(ctx, c.zendeskClient.GetZendeskClient(), userID, body)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
@@ -146,9 +151,14 @@ func (c *Connector) handleDisableUser(
 		}, nil, err
 	}
 
-	l.Info("user disabled successfully",
-		zap.Int64("user_id", userID),
-		zap.Bool("suspended", updatedUser.Suspended))
+	if !updatedUser.Suspended {
+		return &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: "Failed to disable user"}},
+			},
+		}, nil, err
+	}
 
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
@@ -158,6 +168,22 @@ func (c *Connector) handleDisableUser(
 			"suspended": {Kind: &structpb.Value_BoolValue{BoolValue: updatedUser.Suspended}},
 		},
 	}, nil, nil
+}
+
+func UpdateUser(ctx context.Context, client *zendesk.Client, userID int64, data map[string]any) (zendesk.User, error) {
+	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), data)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	var result struct {
+		User zendesk.User `json:"user"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+	return result.User, nil
 }
 
 // handleEnableUser unsuspends a Zendesk user by setting suspended to false.
@@ -186,56 +212,58 @@ func (c *Connector) handleEnableUser(
 		return nil, nil, fmt.Errorf("invalid user_id format: %w", err)
 	}
 
-	l.Debug("enabling user", zap.Int64("user_id", userID))
+	l.Debug("disabling user with direct HTTP", zap.Int64("user_id", userID))
 
-	currentUser, err := c.zendeskClient.GetUser(ctx, userID)
+	client := c.zendeskClient.GetZendeskClient()
+	payload := map[string]interface{}{
+		"user": map[string]interface{}{
+			"suspended": false,
+		},
+	}
+
+	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
-			body, _ := io.ReadAll(zErr.Body())
-			l.Error("failed to get user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
-		}
-		l.Error("failed to get user", zap.Int64("user_id", userID), zap.Error(err))
-		return &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to get user: %v", err)}},
-			},
-		}, nil, err
-	}
-
-	user := zendesk.User{
-		Name:      currentUser.Name,
-		Suspended: false,
-	}
-
-	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, user)
-	if err != nil {
-		var zErr *zendesk.Error
-		if ok := errors.As(err, &zErr); ok {
-			body, _ := io.ReadAll(zErr.Body())
-			l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(body)))
+			errorBody, _ := io.ReadAll(zErr.Body())
+			l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Int("status_code", zErr.Status()), zap.String("body", string(errorBody)))
 		}
 		l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Error(err))
 		return &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to enable user: %v", err)}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to disable user: %v", err)}},
 			},
 		}, nil, err
 	}
-	l.Debug("user enabled", zap.Int64("user_id", userID), zap.Bool("suspended", updatedUser.Suspended))
 
-	l.Info("user enabled successfully",
-		zap.Int64("user_id", userID),
-		zap.Bool("suspended", updatedUser.Suspended))
+	// Parse response to extract suspended field
+	var response struct {
+		User struct {
+			ID        int64 `json:"id"`
+			Suspended bool  `json:"suspended"`
+		} `json:"user"`
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		l.Error("failed to parse response", zap.Error(err))
+		return &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to parse response: %v", err)}},
+			},
+		}, nil, err
+	}
+
+	l.Info("user enabled successfully", zap.Int64("user_id", userID), zap.Bool("suspended", response.User.Suspended))
 
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"success":   {Kind: &structpb.Value_BoolValue{BoolValue: true}},
 			"message":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d enabled successfully", userID)}},
-			"user_id":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", updatedUser.ID)}},
-			"suspended": {Kind: &structpb.Value_BoolValue{BoolValue: updatedUser.Suspended}},
+			"user_id":   {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", response.User.ID)}},
+			"suspended": {Kind: &structpb.Value_BoolValue{BoolValue: response.User.Suspended}},
 		},
 	}, nil, nil
 }
