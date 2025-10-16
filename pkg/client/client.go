@@ -18,14 +18,14 @@ import (
 const teamMembersRoleAdmin = "admin"
 const teamMembersRoleAgent = "agent"
 
-// Zendesk API endpoint paths for direct API calls
+// Zendesk API endpoint paths for direct API calls.
 const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
-	// Permissions: Admins or agents with permission to edit end-user profiles
+	// Permissions: Admins or agents with permission to edit end-user profiles.
 	pathUser = "/users/%d.json"
 
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
-	// Permissions: Admins or agents with access to all tickets
+	// Permissions: Admins or agents with access to all tickets.
 	pathDeletedUser = "/deleted_users/%d.json"
 )
 
