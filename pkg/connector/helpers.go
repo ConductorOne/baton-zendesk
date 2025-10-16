@@ -96,21 +96,11 @@ func splitFullName(name string) (string, string) {
 	return firstName, lastName
 }
 
-// isValidTeamMember checks team members.
-func isValidTeamMember(user *zendesk.User) bool {
-	if !user.Suspended { // team member
-		return true
-	}
-
-	return false
-}
-
 // getUserSupportRoles gets user roles.
 func getUserSupportRoles(users []zendesk.User) map[string]int64 {
 	var supportRoles = make(map[string]int64)
 	for _, user := range users {
-		userCopy := user
-		if isValidTeamMember(&userCopy) { // only team member
+		if !user.Suspended {
 			supportRoles[user.Role] = user.ID
 		}
 	}
@@ -122,6 +112,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
+		"user_id":    fmt.Sprint(user.ID),
 		"login":      user.Email,
 		"first_name": firstName,
 		"last_name":  lastName,

@@ -18,6 +18,17 @@ import (
 const teamMembersRoleAdmin = "admin"
 const teamMembersRoleAgent = "agent"
 
+// Zendesk API endpoint paths for direct API calls.
+const (
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/
+	// Permissions: Admins or agents with permission to edit end-user profiles.
+	pathUser = "/users/%d.json"
+
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
+	// Permissions: Admins or agents with access to all tickets.
+	pathDeletedUser = "/deleted_users/%d.json"
+)
+
 type ZendeskClient struct {
 	client *zendesk.Client
 }
@@ -460,38 +471,95 @@ func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 	return customRole, nil
 }
 
-func (z *ZendeskClient) CreateUser(ctx context.Context, name, email, role string) (*zendesk.User, error) {
-	if role != teamMembersRoleAdmin && role != teamMembersRoleAgent {
-		// def role
-		role = teamMembersRoleAgent
-	}
-
-	user := zendesk.User{
-		Name:  name,
-		Email: email,
-		Role:  role,
-	}
-	createdUser, err := z.client.CreateUser(ctx, user)
-	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to create user: %w", err)
-	}
-
-	return &createdUser, nil
+// CreateUser creates a new user.
+//
+// Allowed for: Admins or agents with permission to manage team members
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#create-user
+func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zendesk.User, error) {
+	return z.client.CreateUser(ctx, user)
 }
 
-// DeleteUser soft deletes a user in Zendesk by suspending them.
-func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
-	// Zendesk doesn't have a direct delete method, so we suspend the user instead
-	user := zendesk.User{
-		ID:        userID,
-		Suspended: true,
-		Active:    false,
-	}
-
-	_, err := z.client.UpdateUser(ctx, userID, user)
+// UpdateUser updates a user via direct HTTP PUT request with raw data.
+//
+// This function allows updating users with arbitrary fields via direct API call.
+func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[string]any) (zendesk.User, error) {
+	body, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), data)
 	if err != nil {
-		return fmt.Errorf("zendesk-connector: failed to suspend/deactivate user %d: %w", userID, err)
+		return zendesk.User{}, err
 	}
 
+	var result struct {
+		User zendesk.User `json:"user"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+	return result.User, nil
+}
+
+// UpdateUserHttp updates a user via direct HTTP PUT request (no library).
+//
+// This function is only used for enable_user action due to a bug in the Zendesk SDK
+// where the Suspended field has an omitempty JSON tag, preventing unsuspending users
+// (setting suspended=false) through the standard UpdateUser method.
+func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payload map[string]interface{}) (zendesk.User, error) {
+	responseBody, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), payload)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	var response struct {
+		User zendesk.User `json:"user"`
+	}
+
+	err = json.Unmarshal(responseBody, &response)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	return response.User, nil
+}
+
+// DeleteUser soft deletes a user.
+//
+// Allowed for: Admins or agents with permission to edit end-user profiles
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#delete-user
+func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
+	err := z.client.Delete(ctx, fmt.Sprintf(pathUser, userID))
+	if err != nil {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			if zErr.Status() == http.StatusOK {
+				return nil
+			}
+		}
+		return err
+	}
 	return nil
+}
+
+// PermanentlyDeleteUser permanently deletes a soft deleted user.
+//
+// Allowed for: Admins or agents with access to all tickets
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
+func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
+	err := z.client.Delete(ctx, fmt.Sprintf(pathDeletedUser, userID))
+	if err != nil {
+		var zErr *zendesk.Error
+		if ok := errors.As(err, &zErr); ok {
+			if zErr.Status() == http.StatusOK {
+				return nil
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+func (z *ZendeskClient) GetZendeskClient() *zendesk.Client {
+	return z.client
 }

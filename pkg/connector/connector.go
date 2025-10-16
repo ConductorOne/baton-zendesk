@@ -22,6 +22,9 @@ type Connector struct {
 	cachedUsers    []zendesk.User
 	cacheTimestamp time.Time
 	usersMtx       sync.Mutex
+	subdomain      string
+	email          string
+	apiToken       string
 }
 
 func (c *Connector) cacheUsers(ctx context.Context) ([]zendesk.User, error) {
@@ -62,7 +65,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 		groupBuilder(d.zendeskClient, d),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient, d),
-		teamBuilder(d.zendeskClient, d),
+		teamMemberBuilder(d.zendeskClient, d),
 	}
 }
 
@@ -82,31 +85,31 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 				"name": {
 					DisplayName: "Name",
 					Required:    true,
-					Description: "The full name of the user",
+					Description: "The name of the user.",
 					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
 						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
 					},
-					Placeholder: "John Doe",
+					Placeholder: "Name",
 					Order:       1,
 				},
 				"email": {
 					DisplayName: "Email",
-					Required:    true,
-					Description: "This email will be used as the login for the user.",
+					Required:    false,
+					Description: "The email of the user.",
 					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
 						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
 					},
-					Placeholder: "user@example.com",
+					Placeholder: "Email",
 					Order:       2,
 				},
 				"role": {
 					DisplayName: "Role",
 					Required:    false,
-					Description: "User role in Zendesk (agent or admin). Defaults to agent.",
+					Description: "The role of the user.",
 					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{
 						StringField: &v2.ConnectorAccountCreationSchema_StringField{},
 					},
-					Placeholder: "agent",
+					Placeholder: "Role",
 					Order:       3,
 				},
 			},
@@ -134,5 +137,8 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 	return &Connector{
 		zendeskClient: zc,
 		orgs:          zendeskOrgs,
+		subdomain:     subdomain,
+		email:         email,
+		apiToken:      apiToken,
 	}, nil
 }

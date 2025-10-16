@@ -13,12 +13,15 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
 
 1. Zendesk `trial account` sign up for a free Zendesk Support trial  [developer site](https://www.zendesk.com/register/)
 2. Authentication method set to `Token access`
-3. Application Scopes: 
+3. Application Scopes:
   - manage team members
   - manage groups
   - manage organizations
   - grant resources
   - revoke resources
+4. **Permissions for Provisioning Actions**: To use account provisioning features (create, delete, enable, disable users), the API token must belong to an account with one of the following permissions:
+  - **Admin** role, OR
+  - **Agent** role with permission to edit end-user profiles
 
 ## Requesting a sponsored test account
 For a trial Support account, see 
