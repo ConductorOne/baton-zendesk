@@ -18,6 +18,17 @@ import (
 const teamMembersRoleAdmin = "admin"
 const teamMembersRoleAgent = "agent"
 
+// Zendesk API endpoint paths for direct API calls
+const (
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/
+	// Permissions: Admins or agents with permission to edit end-user profiles
+	pathUser = "/users/%d.json"
+
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
+	// Permissions: Admins or agents with access to all tickets
+	pathDeletedUser = "/deleted_users/%d.json"
+)
+
 type ZendeskClient struct {
 	client *zendesk.Client
 }
@@ -469,13 +480,23 @@ func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zend
 	return z.client.CreateUser(ctx, user)
 }
 
-// UpdateUser updates an existing user (by queueing a job).
+// UpdateUser updates a user via direct HTTP PUT request with raw data.
 //
-// Allowed for: Admins or agents with permission to edit end-user profiles
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
-func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, user zendesk.User) (zendesk.User, error) {
-	return z.client.UpdateUser(ctx, userID, user)
+// This function allows updating users with arbitrary fields via direct API call.
+func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[string]any) (zendesk.User, error) {
+	body, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), data)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+
+	var result struct {
+		User zendesk.User `json:"user"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return zendesk.User{}, err
+	}
+	return result.User, nil
 }
 
 // UpdateUserHttp updates a user via direct HTTP PUT request (no library).
@@ -483,12 +504,8 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, user zende
 // This function is only used for enable_user action due to a bug in the Zendesk SDK
 // where the Suspended field has an omitempty JSON tag, preventing unsuspending users
 // (setting suspended=false) through the standard UpdateUser method.
-//
-// Allowed for: Admins or agents with permission to edit end-user profiles
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
 func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payload map[string]interface{}) (zendesk.User, error) {
-	responseBody, err := z.client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
+	responseBody, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), payload)
 	if err != nil {
 		return zendesk.User{}, err
 	}
@@ -511,7 +528,7 @@ func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payloa
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#delete-user
 func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
-	err := z.client.Delete(ctx, fmt.Sprintf("/users/%d.json", userID))
+	err := z.client.Delete(ctx, fmt.Sprintf(pathUser, userID))
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
@@ -530,7 +547,7 @@ func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
 func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
-	err := z.client.Delete(ctx, fmt.Sprintf("/deleted_users/%d.json", userID))
+	err := z.client.Delete(ctx, fmt.Sprintf(pathDeletedUser, userID))
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {

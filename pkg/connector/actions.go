@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -83,10 +82,6 @@ func (c *Connector) RegisterActionManager(ctx context.Context) (connectorbuilder
 }
 
 // handleDisableUser suspends a Zendesk user by setting suspended to true.
-//
-// Allowed for: Admins or agents with permission to edit end-user profiles
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
 func (c *Connector) handleDisableUser(
 	ctx context.Context,
 	args *structpb.Struct,
@@ -133,7 +128,7 @@ func (c *Connector) handleDisableUser(
 			"suspended": true,
 		},
 	}
-	updatedUser, err := UpdateUser(ctx, c.zendeskClient.GetZendeskClient(), userID, body)
+	updatedUser, err := c.zendeskClient.UpdateUser(ctx, userID, body)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
@@ -158,27 +153,7 @@ func (c *Connector) handleDisableUser(
 	}, nil, nil
 }
 
-func UpdateUser(ctx context.Context, client *zendesk.Client, userID int64, data map[string]any) (zendesk.User, error) {
-	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), data)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-
-	var result struct {
-		User zendesk.User `json:"user"`
-	}
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-	return result.User, nil
-}
-
 // handleEnableUser unsuspends a Zendesk user by setting suspended to false.
-//
-// Allowed for: Admins or agents with permission to edit end-user profiles
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#update-user
 func (c *Connector) handleEnableUser(
 	ctx context.Context,
 	args *structpb.Struct,
@@ -202,13 +177,12 @@ func (c *Connector) handleEnableUser(
 
 	l.Debug("enabling user", zap.Int64("user_id", userID))
 
-	client := c.zendeskClient.GetZendeskClient()
 	payload := map[string]interface{}{
 		"user": map[string]interface{}{
 			"suspended": false,
 		},
 	}
-	body, err := client.Put(ctx, fmt.Sprintf("/users/%d.json", userID), payload)
+	response, err := c.zendeskClient.UpdateUserHttp(ctx, userID, payload)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
@@ -224,30 +198,13 @@ func (c *Connector) handleEnableUser(
 		}, nil, err
 	}
 
-	var response struct {
-		User struct {
-			ID        int64 `json:"id"`
-			Suspended bool  `json:"suspended"`
-		} `json:"user"`
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		l.Error("failed to parse response", zap.Error(err))
-		return &structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"success": {Kind: &structpb.Value_BoolValue{BoolValue: false}},
-				"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("Failed to parse response: %v", err)}},
-			},
-		}, nil, err
-	}
-
-	l.Info("user enabled successfully", zap.Int64("user_id", userID), zap.Bool("suspended", response.User.Suspended))
+	l.Info("user enabled successfully", zap.Int64("user_id", userID), zap.Bool("suspended", response.Suspended))
 
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"success": {Kind: &structpb.Value_BoolValue{BoolValue: true}},
 			"message": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("User %d enabled successfully", userID)}},
-			"user_id": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", response.User.ID)}},
+			"user_id": {Kind: &structpb.Value_StringValue{StringValue: fmt.Sprintf("%d", response.ID)}},
 		},
 	}, nil, nil
 }
