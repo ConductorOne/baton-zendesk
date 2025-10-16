@@ -123,7 +123,7 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 		}
 	}
 
-	// This one also returns an error on success
+	// PermanentlyDeleteUser also returns an error on success
 	err = t.client.PermanentlyDeleteUser(ctx, userID)
 	if err != nil {
 		var zErr zendesk.Error
