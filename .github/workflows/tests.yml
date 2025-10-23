@@ -18,12 +18,13 @@ jobs:
         GRANT_PRINCIPAL_TYPE: 'team_member'
 
     steps:
-      - name: Install Go
-        uses: actions/setup-go@v4
-        with:
-          go-version: 1.23.x
+    steps:
       - name: Checkout code
         uses: actions/checkout@v3
+      - name: Install Go
+        uses: actions/setup-go@v5
+          with:
+            go-version-file: go.mod
       - name: Build baton-zendesk
         run: go build ./cmd/baton-zendesk
       - name: Run baton-zendesk-cmd
