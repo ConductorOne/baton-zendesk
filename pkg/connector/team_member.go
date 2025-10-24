@@ -115,9 +115,9 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	// see: vendor/github.com/nukosuke/go-zendesk/zendesk/zendesk.go Line:279
 	err = t.client.DeleteUser(ctx, userID)
 	if err != nil {
-		var zErr zendesk.Error
+		var zErr *zendesk.Error
 		if errors.As(err, &zErr) {
-			if zErr.Status() != http.StatusUnprocessableEntity {
+			if zErr.Status() == http.StatusUnprocessableEntity {
 				return nil, fmt.Errorf("failed to soft delete user %s: %w", resourceId.Resource, err)
 			}
 		}
@@ -126,7 +126,7 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	// PermanentlyDeleteUser also returns an error on success
 	err = t.client.PermanentlyDeleteUser(ctx, userID)
 	if err != nil {
-		var zErr zendesk.Error
+		var zErr *zendesk.Error
 		if errors.As(err, &zErr) {
 			if zErr.Status() == http.StatusUnprocessableEntity {
 				return nil, fmt.Errorf("user %s is not in the deleted state, cannot permanently delete: %w", resourceId.Resource, err)
