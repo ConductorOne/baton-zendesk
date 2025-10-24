@@ -530,7 +530,7 @@ func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payloa
 func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
@@ -549,7 +549,7 @@ func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathDeletedUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
