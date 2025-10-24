@@ -117,7 +117,7 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	if err != nil {
 		var zErr zendesk.Error
 		if errors.As(err, &zErr) {
-			if zErr.Status() != http.StatusUnprocessableEntity {
+			if zErr.Status() == http.StatusUnprocessableEntity {
 				return nil, fmt.Errorf("failed to soft delete user %s: %w", resourceId.Resource, err)
 			}
 		}
