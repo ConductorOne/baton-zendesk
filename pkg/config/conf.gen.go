@@ -8,6 +8,7 @@ type Zendesk struct {
 	ApiToken string `mapstructure:"api-token"`
 	Email string `mapstructure:"email"`
 	Orgs []string `mapstructure:"orgs"`
+	BaseUrl string `mapstructure:"base-url"`
 }
 
 func (c *Zendesk) findFieldByTag(tagValue string) (any, bool) {

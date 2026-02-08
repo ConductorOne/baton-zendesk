@@ -16,6 +16,7 @@ type Connector struct {
 	subdomain     string
 	email         string
 	apiToken      string
+	baseURL       string
 }
 
 // ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
@@ -88,11 +89,11 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string) (*Connector, error) {
+func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string) (*Connector, error) {
 	var zc *client.ZendeskClient
 	if apiToken != "" {
 		var err error
-		zc, err = client.New(ctx, nil, subdomain, email, apiToken)
+		zc, err = client.New(ctx, nil, subdomain, email, apiToken, baseURL)
 		if err != nil {
 			return nil, err
 		}
@@ -104,5 +105,6 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		subdomain:     subdomain,
 		email:         email,
 		apiToken:      apiToken,
+		baseURL:       baseURL,
 	}, nil
 }

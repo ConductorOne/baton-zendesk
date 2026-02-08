@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	configSdk "github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/cli"
+	configSdk "github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/connectorrunner"
 	"github.com/conductorone/baton-zendesk/pkg/config"
@@ -30,7 +30,7 @@ func main() {
 }
 
 func getConnector(ctx context.Context, cfg *config.Zendesk, _ *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
-	cb, err := connector.New(ctx, cfg.Orgs, cfg.Subdomain, cfg.Email, cfg.ApiToken)
+	cb, err := connector.New(ctx, cfg.Orgs, cfg.Subdomain, cfg.Email, cfg.ApiToken, cfg.BaseUrl)
 	if err != nil {
 		return nil, nil, err
 	}
