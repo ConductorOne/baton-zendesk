@@ -1,4 +1,4 @@
-# `baton-zendesk` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-zendesk.svg)](https://pkg.go.dev/github.com/conductorone/baton-zendesk) ![main ci](https://github.com/conductorone/baton-zendesk/actions/workflows/main.yaml/badge.svg)
+# `baton-zendesk` [![Go Reference](https://pkg.go.dev/badge/github.com/conductorone/baton-zendesk.svg)](https://pkg.go.dev/github.com/conductorone/baton-zendesk) ![verify](https://github.com/conductorone/baton-zendesk/actions/workflows/verify.yaml/badge.svg)
 `baton-zendesk` is a connector for Zendesk built using the [Baton SDK](https://github.com/conductorone/baton-sdk). It communicates with the Zendesk API to sync data about users, groups and enterprise.
 
 Check out [Baton](https://github.com/conductorone/baton) to learn more about the project in general.
@@ -24,7 +24,7 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
   - **Agent** role with permission to edit end-user profiles
 
 ## Requesting a sponsored test account
-For a trial Support account, see 
+For a trial Support account, see
 https://developer.zendesk.com/documentation/api-basics/getting-started/getting-a-trial-or-sponsored-account-for-development/#requesting-a-sponsored-test-account
 
 ## brew
