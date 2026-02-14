@@ -33,6 +33,7 @@ var (
 		"base-url",
 		field.WithDisplayName("Base URL"),
 		field.WithDescription("Override the Zendesk API URL (for testing)"),
+		field.WithHidden(true),
 	)
 
 	ConfigurationFields = []field.SchemaField{
