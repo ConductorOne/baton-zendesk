@@ -34,6 +34,7 @@ var (
 		field.WithDisplayName("Base URL"),
 		field.WithDescription("Override the Zendesk API URL (for testing)"),
 		field.WithHidden(true),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
 	)
 
 	ConfigurationFields = []field.SchemaField{
