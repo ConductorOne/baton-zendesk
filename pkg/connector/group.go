@@ -18,7 +18,6 @@ import (
 
 const (
 	memberEntitlement = "member"
-	adminEntitlement  = "admin"
 )
 
 type groupResourceType struct {
@@ -29,7 +28,6 @@ type groupResourceType struct {
 
 var groupEntitlementAccessLevels = []string{
 	memberEntitlement,
-	adminEntitlement,
 }
 
 func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -110,12 +108,6 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
 			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
-		}
-
-		if userAccountDetail.Role == adminEntitlement {
-			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
-			teamAdminsGrant := grant.NewGrant(ur, adminEntitlement, resource.Id)
-			rv = append(rv, adminsGrant, teamAdminsGrant)
 		}
 
 		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)

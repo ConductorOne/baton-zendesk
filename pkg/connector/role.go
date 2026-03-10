@@ -12,7 +12,6 @@ import (
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
-	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
 )
 
@@ -137,25 +136,59 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, err
 	}
 
-	roleMembershipOptions := zendesk.CustomRole{
-		Name: fmt.Sprintf("Custom Role %d ", roleID),
-	}
-	membership, err := r.client.CreateCustomRoleMembership(ctx, roleMembershipOptions)
+	// Assign the custom role to the user by updating their custom_role_id.
+	// The Zendesk API assigns custom roles via PUT /users/{id}.json.
+	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{
+		"user": map[string]any{
+			"custom_role_id": roleID,
+		},
+	})
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+		return nil, fmt.Errorf("zendesk-connector: failed to assign custom role to user: %s", err.Error())
 	}
 
-	l.Warn("Role Membership has been created.",
-		zap.Int64("ID", membership.ID),
-		zap.String("Name", membership.Name),
-		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
-		zap.Time("CreatedAt", membership.CreatedAt),
+	l.Info("Custom role has been assigned to user.",
+		zap.Int64("userID", updatedUser.ID),
+		zap.Int64("customRoleID", updatedUser.CustomRoleID),
 	)
 
 	return nil, nil
 }
 
 func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	principal := grant.Principal
+
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
+		l.Warn(
+			"baton-zendesk: only team members can have role membership revoked",
+			zap.String("principal_type", principal.Id.ResourceType),
+			zap.String("principal_id", principal.Id.Resource),
+		)
+		return nil, fmt.Errorf("baton-zendesk: only team members can have role membership revoked")
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, err
+	}
+
+	// Remove the custom role assignment by setting custom_role_id to null.
+	// This reverts the user to the default agent role.
+	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{
+		"user": map[string]any{
+			"custom_role_id": nil,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("zendesk-connector: failed to revoke custom role from user: %s", err.Error())
+	}
+
+	l.Info("Custom role has been revoked from user.",
+		zap.Int64("userID", updatedUser.ID),
+	)
+
 	return nil, nil
 }
 
