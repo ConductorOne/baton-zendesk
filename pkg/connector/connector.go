@@ -3,7 +3,6 @@ package connector
 import (
 	"context"
 	"io"
-	"strconv"
 	"sync"
 	"time"
 
@@ -36,7 +35,7 @@ func (c *Connector) cacheUsers(ctx context.Context) ([]zendesk.User, error) {
 	}
 
 	var usersToCache []zendesk.User
-	pageToken := 0
+	pageToken := ""
 	for {
 		users, nextPageToken, err := c.zendeskClient.ListUsers(ctx, pageToken)
 		if err != nil {
@@ -46,12 +45,8 @@ func (c *Connector) cacheUsers(ctx context.Context) ([]zendesk.User, error) {
 
 		if nextPageToken == "" {
 			break
-		} else {
-			pageToken, err = strconv.Atoi(nextPageToken)
-			if err != nil {
-				return nil, err
-			}
 		}
+		pageToken = nextPageToken
 	}
 
 	c.cachedUsers = usersToCache

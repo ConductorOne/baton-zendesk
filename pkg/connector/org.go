@@ -41,26 +41,11 @@ func (o *orgResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 // List returns all the organizations from the database as resource objects.
 func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var (
-		ret       []*v2.Resource
-		pageToken int
-		err       error
+		ret []*v2.Resource
+		err error
 	)
 
-	if pToken != nil && pToken.Token != "" {
-		pageToken, err = strconv.Atoi(pToken.Token)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("zendesk-connector: failed to parse org page token: %w", err)
-		}
-	}
-
-	opts := &zendesk.OrganizationListOptions{
-		PageOptions: zendesk.PageOptions{
-			Page:    pageToken,
-			PerPage: pToken.Size,
-		},
-	}
-
-	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts)
+	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, pToken.Token)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
@@ -110,29 +95,11 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 
 func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
 	var (
-		rv        []*v2.Grant
-		err       error
-		pageToken int
+		rv  []*v2.Grant
+		err error
 	)
 
-	if pToken != nil && pToken.Token != "" {
-		pageToken, err = strconv.Atoi(pToken.Token)
-		if err != nil {
-			return nil, "", nil, fmt.Errorf("zendesk-connector: failed to parse org page token: %w", err)
-		}
-	}
-
-	opts := zendesk.UserListOptions{
-		Roles: []string{
-			orgRoleAdmin,
-			orgRoleAgent,
-		},
-		PageOptions: zendesk.PageOptions{
-			Page:    pageToken,
-			PerPage: pToken.Size,
-		},
-	}
-	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, &opts)
+	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, pToken.Token)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to list org members: %w", err)
 	}

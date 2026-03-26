@@ -40,18 +40,11 @@ func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 // Groups include a GroupTrait because they are the 'shape' of a standard group.
 func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
 	var (
-		pageToken int
-		err       error
-		ret       []*v2.Resource
+		err error
+		ret []*v2.Resource
 	)
-	if pToken.Token != "" {
-		pageToken, err = strconv.Atoi(pToken.Token)
-		if err != nil {
-			return nil, "", nil, err
-		}
-	}
 
-	groups, nextPageToken, err := g.client.ListGroups(ctx, pageToken)
+	groups, nextPageToken, err := g.client.ListGroups(ctx, pToken.Token)
 	if err != nil {
 		return nil, "", nil, err
 	}
