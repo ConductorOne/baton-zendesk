@@ -149,7 +149,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 	}
 	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Id: oID},
+		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{"admin", "agent"}},
 	})
 	if err != nil {
 		return nil, "", err
