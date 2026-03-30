@@ -115,7 +115,6 @@ func (z *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User
 	return user, err
 }
 
-
 // GetGroupDetails get an existing group.
 func (z *ZendeskClient) GetGroupDetails(ctx context.Context, groupID int64) (zendesk.Group, error) {
 	group, err := z.client.GetGroup(ctx, groupID)
@@ -149,7 +148,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 	}
 	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{"admin", "agent"}},
+		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
 		return nil, "", err
@@ -323,7 +322,6 @@ func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, or
 
 	return organizationMembershipID, err
 }
-
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org
 // https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#create-membership
