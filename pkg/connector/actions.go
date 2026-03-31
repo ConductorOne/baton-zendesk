@@ -11,17 +11,14 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/actions"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func (c *Connector) RegisterActionManager(ctx context.Context) (connectorbuilder.CustomActionManager, error) {
+func (c *Connector) GlobalActions(ctx context.Context, registry actions.ActionRegistry) error {
 	l := ctxzap.Extract(ctx)
-
-	actionManager := actions.NewActionManager(ctx)
 
 	disableUserSchema := &v2.BatonActionSchema{
 		Name:        "disable_user",
@@ -51,12 +48,12 @@ func (c *Connector) RegisterActionManager(ctx context.Context) (connectorbuilder
 		},
 	}
 
-	err := actionManager.RegisterAction(ctx, "disable_user", disableUserSchema, func(ctx context.Context, args *structpb.Struct) (*structpb.Struct, annotations.Annotations, error) {
+	err := registry.Register(ctx, disableUserSchema, func(ctx context.Context, args *structpb.Struct) (*structpb.Struct, annotations.Annotations, error) {
 		return c.handleDisableUser(ctx, args)
 	})
 	if err != nil {
 		l.Error("failed to register disable_user action", zap.Error(err))
-		return nil, err
+		return err
 	}
 
 	l.Info("registered disable_user action")
@@ -89,16 +86,16 @@ func (c *Connector) RegisterActionManager(ctx context.Context) (connectorbuilder
 		},
 	}
 
-	err = actionManager.RegisterAction(ctx, "enable_user", enableUserSchema, func(ctx context.Context, args *structpb.Struct) (*structpb.Struct, annotations.Annotations, error) {
+	err = registry.Register(ctx, enableUserSchema, func(ctx context.Context, args *structpb.Struct) (*structpb.Struct, annotations.Annotations, error) {
 		return c.handleEnableUser(ctx, args)
 	})
 	if err != nil {
 		l.Error("failed to register enable_user action", zap.Error(err))
-		return nil, err
+		return err
 	}
 
 	l.Info("registered enable_user action")
-	return actionManager, nil
+	return nil
 }
 
 // handleDisableUser suspends a Zendesk user by setting suspended to true.

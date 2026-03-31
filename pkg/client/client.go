@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -49,93 +48,61 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 }
 
 // ListUsers returns all ZendeskClient users.
-func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken int) ([]zendesk.User, string, error) {
-	var nextPageToken string
-	users, page, err := z.client.GetUsers(ctx, &zendesk.UserListOptions{
-		Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}, // exclude end-users
-		PageOptions: zendesk.PageOptions{
-			Page: pageToken,
-		},
+func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zendesk.User, string, error) {
+	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CommonOptions:    zendesk.CommonOptions{Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
 		return nil, "", err
 	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
+	if meta.HasMore {
+		return users, meta.AfterCursor, nil
 	}
-
-	return users, nextPageToken, err
+	return users, "", nil
 }
 
 // ListGroups returns all ZendeskClient user groups.
-func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken int) ([]zendesk.Group, string, error) {
-	var nextPageToken string
-	groups, page, err := z.client.GetGroups(ctx, &zendesk.GroupListOptions{
-		PageOptions: zendesk.PageOptions{
-			Page: pageToken,
-		},
+func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zendesk.Group, string, error) {
+	groups, meta, err := z.client.GetGroupsCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
 		return nil, "", err
 	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
+	if meta.HasMore {
+		return groups, meta.AfterCursor, nil
 	}
-
-	return groups, nextPageToken, err
+	return groups, "", nil
 }
 
 // ListOrganizations fetch organization list.
-func (z *ZendeskClient) ListOrganizations(ctx context.Context, opts *zendesk.OrganizationListOptions) ([]zendesk.Organization, string, error) {
-	var nextPageToken string
-	orgs, page, err := z.client.GetOrganizations(ctx, opts)
+func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string) ([]zendesk.Organization, string, error) {
+	orgs, meta, err := z.client.GetOrganizationsCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+	})
 	if err != nil {
 		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
+	if meta.HasMore {
+		return orgs, meta.AfterCursor, nil
 	}
-
-	return orgs, nextPageToken, err
+	return orgs, "", nil
 }
 
 // GetGroupMemberships get the memberships of the specified group.
 func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, pageToken string) ([]zendesk.GroupMembership, string, error) {
-	var nextPageToken string
-
-	pageOptions, err := parsePageOptions(pageToken)
-	if err != nil {
-		return nil, "", err
-	}
-
-	groupMemberships, page, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
-		GroupID:     groupId,
-		PageOptions: pageOptions,
+	memberships, meta, err := z.client.GetGroupMembershipsCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CommonOptions:    zendesk.CommonOptions{GroupID: groupId},
 	})
 	if err != nil {
 		return nil, "", err
 	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
+	if meta.HasMore {
+		return memberships, meta.AfterCursor, nil
 	}
-
-	return groupMemberships, nextPageToken, err
+	return memberships, "", nil
 }
 
 // GetUser get an existing user.
@@ -146,31 +113,6 @@ func (z *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User
 	}
 
 	return user, err
-}
-
-// GetUsers gets users based on roles.
-func (z *ZendeskClient) GetUsers(ctx context.Context, opts *zendesk.UserListOptions) (map[int64]zendesk.User, string, error) {
-	var (
-		mapUsers      = make(map[int64]zendesk.User)
-		nextPageToken string
-	)
-	users, page, err := z.client.GetUsers(ctx, opts)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
-	}
-
-	for _, user := range users {
-		mapUsers[user.ID] = user
-	}
-
-	return mapUsers, nextPageToken, err
 }
 
 // GetGroupDetails get an existing group.
@@ -199,52 +141,22 @@ func (z *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (s
 }
 
 // GetOrganizationUsers fetch organization users list.
-func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, opts *zendesk.UserListOptions) ([]zendesk.User, string, error) {
-	var nextPageToken string
+func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, pageToken string) ([]zendesk.User, string, error) {
 	oID, err := strconv.ParseInt(orgID.Resource, 10, 64)
 	if err != nil {
 		return nil, "", err
 	}
-
-	users, page, err := z.client.GetOrganizationUsers(ctx, oID, opts)
-
+	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
+	})
 	if err != nil {
 		return nil, "", err
 	}
-
-	if page.NextPage != nil {
-		nextPageToken, err = parseNextPage(*page.NextPage)
-		if err != nil {
-			return nil, "", err
-		}
+	if meta.HasMore {
+		return users, meta.AfterCursor, nil
 	}
-
-	return users, nextPageToken, nil
-}
-
-// GetOrganizationMemberships fetch organization memberships.
-func (z *ZendeskClient) GetOrganizationMemberships(ctx context.Context, opts *zendesk.OrganizationMembershipListOptions) ([]zendesk.OrganizationMembership, zendesk.Page, error) {
-	orgMemberships, _, err := z.client.GetOrganizationMemberships(ctx, opts)
-	if err != nil {
-		return nil, zendesk.Page{}, err
-	}
-
-	return orgMemberships, zendesk.Page{}, nil
-}
-
-// GetRole get an existing user role.
-func (z *ZendeskClient) GetRole(ctx context.Context, membership zendesk.OrganizationMembership) (string, zendesk.Page, error) {
-	users, nextPage, err := z.client.GetOrganizationUsers(ctx, membership.OrganizationID, &zendesk.UserListOptions{})
-	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch role: %w", err)
-	}
-	for _, user := range users {
-		if user.ID == membership.UserID {
-			return user.Role, nextPage, nil
-		}
-	}
-
-	return "", zendesk.Page{}, err
+	return users, "", nil
 }
 
 // GetUserAccountResource creates a new connector resource for a Jamf user account.
@@ -409,34 +321,6 @@ func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, or
 	}
 
 	return organizationMembershipID, err
-}
-
-func parseNextPage(u string) (string, error) {
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return "", err
-	}
-	q := parsed.Query()
-	nextPageToken := q.Get("page")
-	if nextPageToken == "" {
-		return "", errors.New("invalid page token")
-	}
-	return nextPageToken, nil
-}
-
-func parsePageOptions(pageToken string) (zendesk.PageOptions, error) {
-	if pageToken == "" {
-		return zendesk.PageOptions{}, nil
-	}
-
-	pageInt, err := strconv.Atoi(pageToken)
-	if err != nil {
-		return zendesk.PageOptions{}, fmt.Errorf("failed to parse page token: %w", err)
-	}
-
-	return zendesk.PageOptions{
-		Page: pageInt,
-	}, nil
 }
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org
