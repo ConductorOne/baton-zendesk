@@ -358,7 +358,6 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[s
 	return result.User, nil
 }
 
-
 // DeleteUser soft deletes a user.
 //
 // Allowed for: Admins or agents with permission to edit end-user profiles
