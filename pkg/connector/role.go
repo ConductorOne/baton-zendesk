@@ -122,38 +122,10 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 }
 
 func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
-	l := ctxzap.Extract(ctx)
-
-	principal := grant.Principal
-	if principal.Id.ResourceType != resourceTypeTeam.Id {
-		l.Warn(
-			"baton-zendesk: only team members can have role membership revoked",
-			zap.String("principal_type", principal.Id.ResourceType),
-			zap.String("principal_id", principal.Id.Resource),
-		)
-		return nil, fmt.Errorf("baton-zendesk: only team members can have role membership revoked")
-	}
-
-	// Revoking admin is not supported via the custom role model.
-	if grant.Entitlement.Slug == zendesk.UserRoleText(zendesk.UserRoleAdmin) {
-		return nil, fmt.Errorf("baton-zendesk: revoking admin role is not supported")
-	}
-
-	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	// Setting custom_role_id to 0 removes the custom role and reverts the user to the base agent role.
-	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{"user": map[string]any{"custom_role_id": 0}})
-	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: failed to revoke custom role from user: %w", err)
-	}
-
-	l.Debug("Custom role revoked, user reverted to base agent role.",
-		zap.Int64("userID", updatedUser.ID),
-	)
-
+	// TODO: implement role revoke
+	// - validate principal is resourceTypeTeam
+	// - reject admin role revoke (not supported via custom role model)
+	// - set custom_role_id=0 to revert user to base agent role
 	return nil, nil
 }
 
