@@ -47,24 +47,18 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, _ 
 	return rv, nil, nil
 }
 
-func (r *roleResourceType) Entitlements(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
-	var (
-		err error
-		rv  []*v2.Entitlement
-	)
+func (r *roleResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, nil, nil
+}
 
-	// TODO: luisina - review cache handling
-	users, err := r.connector.cacheUsers(ctx, opts.Session)
-	if err != nil {
-		return nil, nil, err
+func (r *roleResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	var rv []*v2.Entitlement
+	for _, roleType := range []int{zendesk.UserRoleAgent, zendesk.UserRoleAdmin} {
+		supportRole := zendesk.UserRoleText(roleType)
+		rv = append(rv, ent.NewPermissionEntitlement(nil, supportRole,
+			ent.WithGrantableTo(resourceTypeTeam, resourceTypeGroup),
+		))
 	}
-
-	for supportRole := range getUserSupportRoles(users) {
-		permissionOptions := PopulateOptions(resource.DisplayName, supportRole, resource.Id.Resource)
-		permissionEn := ent.NewPermissionEntitlement(resource, supportRole, permissionOptions...)
-		rv = append(rv, permissionEn)
-	}
-
 	return rv, nil, nil
 }
 
