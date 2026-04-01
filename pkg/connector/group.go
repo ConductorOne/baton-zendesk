@@ -77,6 +77,7 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 }
 
 func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	l := ctxzap.Extract(ctx)
 	var rv []*v2.Grant
 	groupId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 	if err != nil {
@@ -101,6 +102,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 	for _, membership := range groupMemberships {
 		user := getUserByID(membership.UserID, mapUsers)
 		if user.ID == 0 {
+			l.Debug("skipping group membership: user not found in cache", zap.Int64("userID", membership.UserID), zap.String("groupID", resource.Id.Resource))
 			continue
 		}
 		ur, err := getUserResource(user, resourceTypeTeam)

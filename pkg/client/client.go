@@ -226,27 +226,6 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	return result.GroupMemberships, nil
 }
 
-// CreateCustomRoleMembership Assigns an agent to a given group.
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/account-configuration/custom_roles/#list-custom-roles
-func (z *ZendeskClient) CreateCustomRoleMembership(ctx context.Context, roleMemberships zendesk.CustomRole) (zendesk.CustomRole, error) {
-	var data, result struct {
-		CustomRoles zendesk.CustomRole `json:"custom_role"`
-	}
-
-	data.CustomRoles = roleMemberships
-	body, err := z.client.Post(ctx, "/custom_roles.json", data)
-	if err != nil {
-		return zendesk.CustomRole{}, err
-	}
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return zendesk.CustomRole{}, err
-	}
-
-	return result.CustomRoles, nil
-}
 
 // GetGroupMembershipByGroup gets an existing group membership.
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {

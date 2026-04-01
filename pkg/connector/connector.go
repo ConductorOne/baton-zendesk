@@ -28,6 +28,11 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 	}
 }
 
+// Close cleans up any resources held by the connector.
+func (d *Connector) Close() error {
+	return nil
+}
+
 // Asset takes an input AssetRef and attempts to fetch it using the connector's authenticated http client
 // It streams a response, always starting with a metadata object, following by chunked payloads for the asset.
 func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.ReadCloser, error) {
@@ -38,7 +43,7 @@ func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.R
 func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
 		DisplayName: "Zendesk Connector",
-		Description: "Connector syncing users, groups, and roles from Zendesk..",
+		Description: "Connector syncing users, groups, and roles from Zendesk.",
 		AccountCreationSchema: &v2.ConnectorAccountCreationSchema{
 			FieldMap: map[string]*v2.ConnectorAccountCreationSchema_Field{
 				"name": {
