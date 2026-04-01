@@ -2,7 +2,7 @@ package connector
 
 import (
 	"context"
-	"sort"
+	"fmt"
 	"strconv"
 
 	"github.com/conductorone/baton-sdk/pkg/session"
@@ -12,56 +12,39 @@ import (
 
 var usersNamespace = sessions.WithPrefix("zendesk:users")
 
-func (c *Connector) cacheUsers(ctx context.Context, ss sessions.SessionStore) ([]zendesk.User, error) {
-	if ss != nil {
-		cached, err := session.GetAllJSON[zendesk.User](ctx, ss, usersNamespace)
-		if err == nil && len(cached) > 0 {
-			indices := make([]int, 0, len(cached))
-			for k := range cached {
-				i, err := strconv.Atoi(k)
-				if err != nil {
-					users := make([]zendesk.User, 0, len(cached))
-					for _, u := range cached {
-						users = append(users, u)
-					}
-					return users, nil
-				}
-				indices = append(indices, i)
-			}
-			sort.Ints(indices)
-			users := make([]zendesk.User, 0, len(indices))
-			for _, i := range indices {
-				if u, ok := cached[strconv.Itoa(i)]; ok {
-					users = append(users, u)
-				}
-			}
-			return users, nil
-		}
+// populateCache stores a page of users into the session store, keyed by user ID.
+// Called from team_member.List on each page so the cache is built incrementally during resource sync.
+func (c *Connector) populateCache(ctx context.Context, ss sessions.SessionStore, users []zendesk.User) error {
+	if ss == nil || len(users) == 0 {
+		return nil
 	}
+	userMap := make(map[string]zendesk.User, len(users))
+	for _, user := range users {
+		userMap[fmt.Sprintf("%d", user.ID)] = user
+	}
+	return session.SetManyJSON(ctx, ss, userMap, usersNamespace)
+}
 
-	var usersToCache []zendesk.User
-	pageToken := ""
-	for {
-		users, nextPageToken, err := c.zendeskClient.ListUsers(ctx, pageToken)
+// getCachedUsersByIDs fetches only the specified users from the session store.
+func (c *Connector) getCachedUsersByIDs(ctx context.Context, ss sessions.SessionStore, userIDs []int64) (map[int64]zendesk.User, error) {
+	if ss == nil {
+		return nil, nil
+	}
+	keys := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		keys[i] = fmt.Sprintf("%d", id)
+	}
+	cached, err := session.GetManyJSON[zendesk.User](ctx, ss, keys, usersNamespace)
+	if err != nil {
+		return nil, err
+	}
+	users := make(map[int64]zendesk.User, len(cached))
+	for k, u := range cached {
+		id, err := strconv.ParseInt(k, 10, 64)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid user ID key in cache %q: %w", k, err)
 		}
-		usersToCache = append(usersToCache, users...)
-		if nextPageToken == "" {
-			break
-		}
-		pageToken = nextPageToken
+		users[id] = u
 	}
-
-	if ss != nil && len(usersToCache) > 0 {
-		userMap := make(map[string]zendesk.User, len(usersToCache))
-		for i, user := range usersToCache {
-			userMap[strconv.Itoa(i)] = user
-		}
-		if err := session.SetManyJSON(ctx, ss, userMap, usersNamespace); err != nil {
-			return nil, err
-		}
-	}
-
-	return usersToCache, nil
+	return users, nil
 }

@@ -27,9 +27,12 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
 func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
-	// TODO: luisina - review cache handling
-	users, err := t.connector.cacheUsers(ctx, opts.Session)
+	users, nextPageToken, err := t.client.ListUsers(ctx, opts.PageToken.Token)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if err := t.connector.populateCache(ctx, opts.Session, users); err != nil {
 		return nil, nil, err
 	}
 
@@ -40,11 +43,10 @@ func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.
 		if err != nil {
 			return nil, nil, err
 		}
-
 		rv = append(rv, userResource)
 	}
 
-	return rv, nil, nil
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
 func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {

@@ -63,38 +63,27 @@ func (r *roleResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttr
 }
 
 func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	var (
-		err error
-		rv  []*v2.Grant
-	)
-
-	users, err := r.connector.cacheUsers(ctx, opts.Session)
+	roleID, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	users, nextPageToken, err := r.client.ListUsersByRole(ctx, roleID, opts.PageToken.Token)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var rv []*v2.Grant
 	for _, user := range users {
 		userCopy := user
-
-		resourceId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		if user.CustomRoleID != resourceId {
-			continue
-		}
-
 		ur, err := getUserRoleResource(&userCopy, resourceTypeTeam)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
 		}
-
-		gr := grant.NewGrant(resource, user.Role, ur.Id)
-		rv = append(rv, gr)
+		rv = append(rv, grant.NewGrant(resource, user.Role, ur.Id))
 	}
 
-	return rv, nil, nil
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
 func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {

@@ -62,6 +62,21 @@ func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zend
 	return users, "", nil
 }
 
+// ListUsersByRole returns users assigned to a specific custom role, with cursor pagination.
+func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageToken string) ([]zendesk.User, string, error) {
+	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CommonOptions:    zendesk.CommonOptions{PermissionSet: roleID},
+	})
+	if err != nil {
+		return nil, "", err
+	}
+	if meta.HasMore {
+		return users, meta.AfterCursor, nil
+	}
+	return users, "", nil
+}
+
 // ListGroups returns all ZendeskClient user groups.
 func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zendesk.Group, string, error) {
 	groups, meta, err := z.client.GetGroupsCBP(ctx, &zendesk.CBPOptions{

@@ -84,29 +84,29 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 		return nil, nil, err
 	}
 
-	// TODO: luisina - review cache handling
-	users, err := g.connector.cacheUsers(ctx, opts.Session)
-	mapUsers := make(map[int64]zendesk.User)
-	for _, user := range users {
-		mapUsers[user.ID] = user
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
 	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), opts.PageToken.Token)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	for _, group := range groupMemberships {
-		userAccountDetail := getUserByID(group.UserID, mapUsers)
-		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
+	memberIDs := make([]int64, len(groupMemberships))
+	for i, m := range groupMemberships {
+		memberIDs[i] = m.UserID
+	}
+
+	mapUsers, err := g.connector.getCachedUsersByIDs(ctx, opts.Session, memberIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, membership := range groupMemberships {
+		user := getUserByID(membership.UserID, mapUsers)
+		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
 
-		if userAccountDetail.Role == adminEntitlement {
+		if user.Role == adminEntitlement {
 			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
 			teamAdminsGrant := grant.NewGrant(ur, adminEntitlement, resource.Id)
 			rv = append(rv, adminsGrant, teamAdminsGrant)
