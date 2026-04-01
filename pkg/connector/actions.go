@@ -193,12 +193,12 @@ func (c *Connector) handleEnableUser(
 
 	l.Debug("enabling user", zap.Int64("user_id", userID))
 
-	payload := map[string]interface{}{
-		"user": map[string]interface{}{
+	payload := map[string]any{
+		"user": map[string]any{
 			"suspended": false,
 		},
 	}
-	response, err := c.zendeskClient.UpdateUserHttp(ctx, userID, payload)
+	response, err := c.zendeskClient.UpdateUser(ctx, userID, payload)
 	if err != nil {
 		var zErr *zendesk.Error
 		if ok := errors.As(err, &zErr); ok {

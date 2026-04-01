@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -79,7 +80,7 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, op
 		if err != nil {
 			return nil, nil, fmt.Errorf("error creating team_member resource for role %s: %w", resource.Id.Resource, err)
 		}
-		rv = append(rv, grant.NewGrant(resource, user.Role, ur.Id))
+		rv = append(rv, grant.NewGrant(resource, strings.ToLower(user.Role), ur.Id))
 	}
 
 	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil

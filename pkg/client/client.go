@@ -226,7 +226,6 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	return result.GroupMemberships, nil
 }
 
-
 // GetGroupMembershipByGroup gets an existing group membership.
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {
 	groups, nextPage, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
@@ -359,28 +358,6 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[s
 	return result.User, nil
 }
 
-// UpdateUserHttp updates a user via direct HTTP PUT request (no library).
-//
-// This function is only used for enable_user action due to a bug in the Zendesk SDK
-// where the Suspended field has an omitempty JSON tag, preventing unsuspending users
-// (setting suspended=false) through the standard UpdateUser method.
-func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payload map[string]interface{}) (zendesk.User, error) {
-	responseBody, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), payload)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-
-	var response struct {
-		User zendesk.User `json:"user"`
-	}
-
-	err = json.Unmarshal(responseBody, &response)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-
-	return response.User, nil
-}
 
 // DeleteUser soft deletes a user.
 //
