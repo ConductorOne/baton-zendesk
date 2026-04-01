@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 
 	"github.com/conductorone/baton-sdk/pkg/session"
@@ -30,9 +29,12 @@ func (c *Connector) getCachedUsersByIDs(ctx context.Context, ss sessions.Session
 	if ss == nil {
 		return nil, nil
 	}
+	keyToID := make(map[string]int64, len(userIDs))
 	keys := make([]string, len(userIDs))
 	for i, id := range userIDs {
-		keys[i] = strconv.FormatInt(id, 10)
+		k := strconv.FormatInt(id, 10)
+		keys[i] = k
+		keyToID[k] = id
 	}
 	cached, err := session.GetManyJSON[zendesk.User](ctx, ss, keys, usersNamespace)
 	if err != nil {
@@ -40,11 +42,7 @@ func (c *Connector) getCachedUsersByIDs(ctx context.Context, ss sessions.Session
 	}
 	users := make(map[int64]zendesk.User, len(cached))
 	for k, u := range cached {
-		id, err := strconv.ParseInt(k, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("invalid user ID key in cache %q: %w", k, err)
-		}
-		users[id] = u
+		users[keyToID[k]] = u
 	}
 	return users, nil
 }

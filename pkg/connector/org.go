@@ -156,7 +156,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to add user to an organization: %w", err)
 	}
 
-	l.Warn("Membership has been created.",
+	l.Debug("Membership has been created.",
 		zap.Int64("ID", oganizationMembership.ID),
 		zap.Int64("UserID", oganizationMembership.UserID),
 		zap.Int64("OganizationID", oganizationMembership.OrganizationID),
@@ -200,7 +200,7 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 		return nil, fmt.Errorf("baton-zendesk: failed to revoke organization: %w", err)
 	}
 
-	l.Warn("Membership has been revoked..",
+	l.Debug("Membership has been revoked.",
 		zap.String("organizationMembershipID", organizationMembershipID),
 	)
 

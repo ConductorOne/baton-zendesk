@@ -23,7 +23,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 	return []connectorbuilder.ResourceSyncerV2{
 		groupBuilder(d.zendeskClient, d),
 		orgBuilder(d.zendeskClient, d.orgs),
-		roleBuilder(d.zendeskClient, d),
+		roleBuilder(d.zendeskClient),
 		teamMemberBuilder(d.zendeskClient, d),
 	}
 }

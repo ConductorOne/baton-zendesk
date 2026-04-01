@@ -101,6 +101,9 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 
 	for _, membership := range groupMemberships {
 		user := getUserByID(membership.UserID, mapUsers)
+		if user.ID == 0 {
+			continue
+		}
 		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
@@ -158,7 +161,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to add team member to a group: %w", err)
 	}
 
-	l.Warn("Membership has been created.",
+	l.Debug("Membership has been created.",
 		zap.Int64("ID", membership.ID),
 		zap.Int64("UserID", membership.UserID),
 		zap.Int64("GroupID", membership.GroupID),
@@ -202,7 +205,7 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 		return nil, fmt.Errorf("baton-zendesk: failed to revoke team member: %w", err)
 	}
 
-	l.Warn("Membership has been revoked..",
+	l.Debug("Membership has been revoked.",
 		zap.String("groupMembershipID", groupMembershipID),
 	)
 

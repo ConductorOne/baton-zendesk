@@ -19,7 +19,6 @@ import (
 type roleResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	connector    *Connector
 }
 
 func (r *roleResourceType) ResourceType(_ context.Context) *v2.ResourceType {
@@ -103,19 +102,6 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, err
 	}
 
-	user, err := r.client.GetUser(ctx, userID)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if user.Role == zendesk.UserRoleText(zendesk.UserRoleEndUser) {
-		l.Warn("user must be a team member",
-			zap.Int64("user", user.ID),
-			zap.String("user.Role", user.Role),
-		)
-		return nil, nil, fmt.Errorf("user must be a team member")
-	}
-
 	roleID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
 	if err != nil {
 		return nil, nil, err
@@ -126,7 +112,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to assign custom role to user: %w", err)
 	}
 
-	l.Info("Custom role assigned to user.",
+	l.Debug("Custom role assigned to user.",
 		zap.Int64("userID", updatedUser.ID),
 		zap.Int64("roleID", roleID),
 	)
@@ -138,10 +124,9 @@ func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotat
 	return nil, nil
 }
 
-func roleBuilder(c *client.ZendeskClient, connector *Connector) *roleResourceType {
+func roleBuilder(c *client.ZendeskClient) *roleResourceType {
 	return &roleResourceType{
 		resourceType: resourceTypeRole,
 		client:       c,
-		connector:    connector,
 	}
 }
