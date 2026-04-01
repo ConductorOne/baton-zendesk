@@ -18,7 +18,6 @@ import (
 type teamMemberResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	connector    *Connector
 }
 
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -32,7 +31,7 @@ func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.
 		return nil, nil, err
 	}
 
-	if err := t.connector.populateCache(ctx, opts.Session, users); err != nil {
+	if err := populateCache(ctx, opts.Session, users); err != nil {
 		return nil, nil, err
 	}
 
@@ -140,10 +139,9 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, connector *Connector) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient) *teamMemberResourceType {
 	return &teamMemberResourceType{
 		resourceType: resourceTypeTeam,
 		client:       zendeskClient,
-		connector:    connector,
 	}
 }

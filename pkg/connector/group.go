@@ -24,7 +24,6 @@ const (
 type groupResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	connector    *Connector
 }
 
 var groupEntitlementAccessLevels = []string{
@@ -79,12 +78,12 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 
 func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	var rv []*v2.Grant
-	groupId, err := strconv.Atoi(resource.Id.Resource)
+	groupId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), opts.PageToken.Token)
+	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, groupId, opts.PageToken.Token)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -94,7 +93,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 		memberIDs[i] = m.UserID
 	}
 
-	mapUsers, err := g.connector.getCachedUsersByIDs(ctx, opts.Session, memberIDs)
+	mapUsers, err := getCachedUsersByIDs(ctx, opts.Session, memberIDs)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -212,10 +211,9 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	return nil, nil
 }
 
-func groupBuilder(cli *client.ZendeskClient, con *Connector) *groupResourceType {
+func groupBuilder(cli *client.ZendeskClient) *groupResourceType {
 	return &groupResourceType{
 		resourceType: resourceTypeGroup,
 		client:       cli,
-		connector:    con,
 	}
 }

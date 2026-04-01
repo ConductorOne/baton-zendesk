@@ -13,7 +13,7 @@ var usersNamespace = sessions.WithPrefix("zendesk:users")
 
 // populateCache stores a page of users into the session store, keyed by user ID.
 // Called from team_member.List on each page so the cache is built incrementally during resource sync.
-func (c *Connector) populateCache(ctx context.Context, ss sessions.SessionStore, users []zendesk.User) error {
+func populateCache(ctx context.Context, ss sessions.SessionStore, users []zendesk.User) error {
 	if ss == nil || len(users) == 0 {
 		return nil
 	}
@@ -25,7 +25,7 @@ func (c *Connector) populateCache(ctx context.Context, ss sessions.SessionStore,
 }
 
 // getCachedUsersByIDs fetches only the specified users from the session store.
-func (c *Connector) getCachedUsersByIDs(ctx context.Context, ss sessions.SessionStore, userIDs []int64) (map[int64]zendesk.User, error) {
+func getCachedUsersByIDs(ctx context.Context, ss sessions.SessionStore, userIDs []int64) (map[int64]zendesk.User, error) {
 	if ss == nil {
 		return nil, nil
 	}
