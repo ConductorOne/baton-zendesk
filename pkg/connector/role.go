@@ -122,11 +122,11 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 }
 
 func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
-	// TODO: implement role revoke
+	// TODO(CXH-1284): implement role revoke
 	// - validate principal is resourceTypeTeam
 	// - reject admin role revoke (not supported via custom role model)
 	// - set custom_role_id=0 to revert user to base agent role
-	return nil, nil
+	return nil, fmt.Errorf("baton-zendesk: role revoke not yet implemented")
 }
 
 func roleBuilder(c *client.ZendeskClient) *roleResourceType {
