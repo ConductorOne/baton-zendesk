@@ -7,9 +7,9 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
@@ -38,30 +38,30 @@ func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 
 // List returns all the groups from the database as resource objects.
 // Groups include a GroupTrait because they are the 'shape' of a standard group.
-func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var (
 		err error
 		ret []*v2.Resource
 	)
 
-	groups, nextPageToken, err := g.client.ListGroups(ctx, pToken.Token)
+	groups, nextPageToken, err := g.client.ListGroups(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	for _, group := range groups {
 		res, err := getGroupResource(group, resourceTypeGroup, parentId)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		ret = append(ret, res)
 	}
 
-	return ret, nextPageToken, nil, nil
+	return ret, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	var rv []*v2.Entitlement
 	for _, level := range groupEntitlementAccessLevels {
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
@@ -74,35 +74,36 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 		))
 	}
 
-	return rv, "", nil, nil
+	return rv, nil, nil
 }
 
-func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	var rv []*v2.Grant
 	groupId, err := strconv.Atoi(resource.Id.Resource)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	users, err := g.connector.cacheUsers(ctx)
+	// TODO: luisina - review cache handling
+	users, err := g.connector.cacheUsers(ctx, opts.Session)
 	mapUsers := make(map[int64]zendesk.User)
 	for _, user := range users {
 		mapUsers[user.ID] = user
 	}
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), token.Token)
+	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	for _, group := range groupMemberships {
 		userAccountDetail := getUserByID(group.UserID, mapUsers)
 		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
+			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
 
 		if userAccountDetail.Role == adminEntitlement {
@@ -116,10 +117,10 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, t
 		rv = append(rv, membershipGrant, teamMembershipGrant)
 	}
 
-	return rv, nextPageToken, nil, nil
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
@@ -127,29 +128,29 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only users can be granted team membership")
+		return nil, nil, fmt.Errorf("zendesk-connector: only users can be granted team membership")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	user, err := g.client.GetUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if user.Role == "end-user" {
 		l.Warn("user must be a team member",
 			zap.Int64("UserID", user.ID),
 			zap.String("user.Role", user.Role),
 		)
-		return nil, fmt.Errorf("user must be a team member")
+		return nil, nil, fmt.Errorf("user must be a team member")
 	}
 
 	groupID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	groupMembershipOptions := zendesk.GroupMembership{
@@ -158,7 +159,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	}
 	membership, err := g.client.CreateGroupMembership(ctx, groupMembershipOptions)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+		return nil, nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
 	}
 
 	l.Warn("Membership has been created.",
@@ -168,7 +169,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 		zap.Time("CreatedAt", membership.CreatedAt),
 	)
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {

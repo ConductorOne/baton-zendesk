@@ -10,7 +10,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
@@ -26,10 +26,11 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 }
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
-func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pt *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-	users, err := t.connector.cacheUsers(ctx)
+func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
+	// TODO: luisina - review cache handling
+	users, err := t.connector.cacheUsers(ctx, opts.Session)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
 	var rv []*v2.Resource
@@ -37,21 +38,21 @@ func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.
 		userCopy := user
 		userResource, err := getTeamResource(&userCopy, t.resourceType)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		rv = append(rv, userResource)
 	}
 
-	return rv, "", nil, nil
+	return rv, nil, nil
 }
 
-func (t *teamMemberResourceType) Entitlements(ctx context.Context, resource *v2.Resource, pt *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
-func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resource, pt *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (t *teamMemberResourceType) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func (t *teamMemberResourceType) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
