@@ -164,13 +164,13 @@ func getUserResource(user zendesk.User, resourceTypeUser *v2.ResourceType) (*v2.
 	return resource, nil
 }
 
-// getUserByID gets an user by ID.
-func getUserByID(userID int64, users map[int64]zendesk.User) zendesk.User {
+// getUserByID looks up a user by ID in the provided map.
+// Returns an error if the user is not found, so the caller can fall back to a live API call.
+func getUserByID(userID int64, users map[int64]zendesk.User) (zendesk.User, error) {
 	if user, ok := users[userID]; ok {
-		return user
+		return user, nil
 	}
-
-	return zendesk.User{}
+	return zendesk.User{}, fmt.Errorf("user %d not found in cache", userID)
 }
 
 // getRoleResource creates a new connector resource for a Zendesk role.

@@ -101,11 +101,18 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 	}
 
 	for _, membership := range groupMemberships {
-		user := getUserByID(membership.UserID, mapUsers)
-		if user.ID == 0 {
-			l.Debug("skipping group membership: user not found in cache", zap.Int64("userID", membership.UserID), zap.String("groupID", resource.Id.Resource))
-			continue
+		user, err := getUserByID(membership.UserID, mapUsers)
+		if err != nil {
+			l.Debug("baton-zendesk: user not in cache, fetching from API", zap.Int64("userID", membership.UserID))
+			user, err = g.client.GetUser(ctx, membership.UserID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("baton-zendesk: failed to get user %d: %w", membership.UserID, err)
+			}
+			if err = populateCache(ctx, opts.Session, []zendesk.User{user}); err != nil {
+				l.Debug("baton-zendesk: failed to populate cache for user", zap.Int64("userID", membership.UserID), zap.Error(err))
+			}
 		}
+
 		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
