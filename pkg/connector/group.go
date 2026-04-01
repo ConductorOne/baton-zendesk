@@ -107,14 +107,10 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 		}
 
 		if user.Role == adminEntitlement {
-			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
-			teamAdminsGrant := grant.NewGrant(ur, adminEntitlement, resource.Id)
-			rv = append(rv, adminsGrant, teamAdminsGrant)
+			rv = append(rv, grant.NewGrant(resource, adminEntitlement, ur.Id))
 		}
 
-		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
-		teamMembershipGrant := grant.NewGrant(ur, memberEntitlement, resource.Id)
-		rv = append(rv, membershipGrant, teamMembershipGrant)
+		rv = append(rv, grant.NewGrant(resource, memberEntitlement, ur.Id))
 	}
 
 	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
