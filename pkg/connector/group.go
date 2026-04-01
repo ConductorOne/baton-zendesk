@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
@@ -45,7 +46,7 @@ func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, o
 
 	groups, nextPageToken, err := g.client.ListGroups(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list groups: %w", err)
 	}
 
 	for _, group := range groups {
@@ -86,7 +87,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 
 	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, groupId, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list group memberships: %w", err)
 	}
 
 	memberIDs := make([]int64, len(groupMemberships))
@@ -110,7 +111,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
 
-		if user.Role == adminEntitlement {
+		if strings.ToLower(user.Role) == adminEntitlement {
 			rv = append(rv, grant.NewGrant(resource, adminEntitlement, ur.Id))
 		}
 
@@ -138,7 +139,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 
 	user, err := g.client.GetUser(ctx, userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to get user %d: %w", userID, err)
 	}
 	if user.Role == zendesk.UserRoleText(zendesk.UserRoleEndUser) {
 		l.Warn("user must be a team member",

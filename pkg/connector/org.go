@@ -46,7 +46,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, fmt.Errorf("baton-zendesk: failed to fetch org: %w", err)
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list organizations: %w", err)
 	}
 
 	for _, org := range orgs {

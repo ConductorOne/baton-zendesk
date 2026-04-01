@@ -28,7 +28,7 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	users, nextPageToken, err := t.client.ListUsers(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list users: %w", err)
 	}
 
 	if err := populateCache(ctx, opts.Session, users); err != nil {

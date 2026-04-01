@@ -32,7 +32,7 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, _ 
 	var rv []*v2.Resource
 	customRole, err := r.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list custom roles: %w", err)
 	}
 	for _, role := range customRole {
 		roleCopy := role
@@ -70,7 +70,7 @@ func (r *roleResourceType) Grants(ctx context.Context, resource *v2.Resource, op
 
 	users, nextPageToken, err := r.client.ListUsersByRole(ctx, roleID, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list users by role %d: %w", roleID, err)
 	}
 
 	var rv []*v2.Grant

@@ -88,7 +88,7 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("baton-zendesk: failed to fetch org: %w", err)
+		return nil, "", err
 	}
 	return orgs, getNextPageToken(meta), nil
 }
@@ -233,7 +233,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		GroupID: groupMemberships.GroupID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("baton-zendesk: failed to fetch groupmembership: %w", err)
+		return "", zendesk.Page{}, err
 	}
 
 	for _, group := range groups {
@@ -252,7 +252,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		OrganizationID: organizationMemberships.OrganizationID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("baton-zendesk: failed to fetch organizationmemberships: %w", err)
+		return "", zendesk.Page{}, err
 	}
 
 	for _, organization := range organizations {
@@ -324,7 +324,7 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
 	customRole, err := z.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: failed to fetch customroles: %w", err)
+		return nil, err
 	}
 
 	return customRole, nil
