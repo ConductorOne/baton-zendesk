@@ -8,7 +8,6 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
@@ -39,15 +38,15 @@ func (o *orgResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 }
 
 // List returns all the organizations from the database as resource objects.
-func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var (
 		ret []*v2.Resource
 		err error
 	)
 
-	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, pToken.Token)
+	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+		return nil, nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
 	}
 
 	for _, org := range orgs {
@@ -68,16 +67,16 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 			),
 		)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		ret = append(ret, orgResource)
 	}
 
-	return ret, nextPageToken, nil, nil
+	return ret, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
@@ -90,24 +89,24 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 		))
 	}
 
-	return rv, "", nil, nil
+	return rv, nil, nil
 }
 
-func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pToken *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	var (
 		rv  []*v2.Grant
 		err error
 	)
 
-	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, pToken.Token)
+	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("zendesk-connector: failed to list org members: %w", err)
+		return nil, nil, fmt.Errorf("zendesk-connector: failed to list org members: %w", err)
 	}
 
 	for _, user := range users {
 		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		roleName := strings.ToLower(user.Role)
@@ -124,10 +123,10 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, pTo
 		}
 	}
 
-	return rv, nextPageToken, nil, nil
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
@@ -135,17 +134,17 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only users can be granted organization membership")
+		return nil, nil, fmt.Errorf("zendesk-connector: only users can be granted organization membership")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	organizationID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	organizationMembership := zendesk.OrganizationMembership{
@@ -154,7 +153,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	}
 	oganizationMembership, err := o.client.CreateOrganizationMembership(ctx, organizationMembership)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to add user to an organization: %s", err.Error())
+		return nil, nil, fmt.Errorf("zendesk-connector: failed to add user to an organization: %s", err.Error())
 	}
 
 	l.Warn("Membership has been created.",
@@ -164,7 +163,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 		zap.Time("CreatedAt", oganizationMembership.CreatedAt),
 	)
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {

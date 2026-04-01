@@ -3,60 +3,24 @@ package connector
 import (
 	"context"
 	"io"
-	"sync"
-	"time"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-zendesk/pkg/client"
-	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
-const TTL = 5 // in minutes
-
 type Connector struct {
-	orgs           []string
-	zendeskClient  *client.ZendeskClient
-	cachedUsers    []zendesk.User
-	cacheTimestamp time.Time
-	usersMtx       sync.Mutex
-	subdomain      string
-	email          string
-	apiToken       string
+	orgs          []string
+	zendeskClient *client.ZendeskClient
+	subdomain     string
+	email         string
+	apiToken      string
 }
 
-func (c *Connector) cacheUsers(ctx context.Context) ([]zendesk.User, error) {
-	c.usersMtx.Lock()
-	defer c.usersMtx.Unlock()
-
-	if c.cachedUsers != nil && time.Since(c.cacheTimestamp) < TTL*time.Minute {
-		return c.cachedUsers, nil
-	}
-
-	var usersToCache []zendesk.User
-	pageToken := ""
-	for {
-		users, nextPageToken, err := c.zendeskClient.ListUsers(ctx, pageToken)
-		if err != nil {
-			return nil, err
-		}
-		usersToCache = append(usersToCache, users...)
-
-		if nextPageToken == "" {
-			break
-		}
-		pageToken = nextPageToken
-	}
-
-	c.cachedUsers = usersToCache
-	c.cacheTimestamp = time.Now()
-	return usersToCache, nil
-}
-
-// ResourceSyncers returns a ResourceSyncer for each resource type that should be synced from the upstream service.
-func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncer {
-	return []connectorbuilder.ResourceSyncer{
+// ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
+func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
+	return []connectorbuilder.ResourceSyncerV2{
 		groupBuilder(d.zendeskClient, d),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient, d),

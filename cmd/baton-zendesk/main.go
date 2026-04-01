@@ -7,6 +7,7 @@ import (
 
 	configSdk "github.com/conductorone/baton-sdk/pkg/config"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/connectorrunner"
 	"github.com/conductorone/baton-sdk/pkg/types"
 	"github.com/conductorone/baton-zendesk/pkg/config"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
@@ -28,6 +29,8 @@ func main() {
 		connectorName,
 		getConnector,
 		config.Config,
+		connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2(&connector.Connector{}),
+		connectorrunner.WithSessionStoreEnabled(),
 	)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
