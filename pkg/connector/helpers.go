@@ -7,7 +7,6 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"golang.org/x/text/cases"
@@ -27,16 +26,6 @@ func titleCase(s string) string {
 	titleCaser := cases.Title(language.English)
 
 	return titleCaser.String(s)
-}
-
-// Populate entitlement options for zendesk resource.
-func PopulateOptions(displayName, permission, resource string) []ent.EntitlementOption {
-	options := []ent.EntitlementOption{
-		ent.WithDisplayName(fmt.Sprintf("%s Role %s", displayName, permission)),
-		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
-		ent.WithGrantableTo(resourceTypeTeam, resourceTypeGroup),
-	}
-	return options
 }
 
 // getUserRoleResource creates a new connector resource for a Zendesk user.
@@ -94,18 +83,6 @@ func splitFullName(name string) (string, string) {
 	}
 
 	return firstName, lastName
-}
-
-// getUserSupportRoles gets user roles.
-func getUserSupportRoles(users []zendesk.User) map[string]int64 {
-	var supportRoles = make(map[string]int64)
-	for _, user := range users {
-		if !user.Suspended {
-			supportRoles[user.Role] = user.ID
-		}
-	}
-
-	return supportRoles
 }
 
 func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {

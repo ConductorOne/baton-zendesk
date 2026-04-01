@@ -56,10 +56,7 @@ func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zend
 	if err != nil {
 		return nil, "", err
 	}
-	if meta.HasMore {
-		return users, meta.AfterCursor, nil
-	}
-	return users, "", nil
+	return users, getNextPageToken(meta), nil
 }
 
 // ListUsersByRole returns users assigned to a specific custom role, with cursor pagination.
@@ -71,10 +68,7 @@ func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageT
 	if err != nil {
 		return nil, "", err
 	}
-	if meta.HasMore {
-		return users, meta.AfterCursor, nil
-	}
-	return users, "", nil
+	return users, getNextPageToken(meta), nil
 }
 
 // ListGroups returns all ZendeskClient user groups.
@@ -85,10 +79,7 @@ func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zen
 	if err != nil {
 		return nil, "", err
 	}
-	if meta.HasMore {
-		return groups, meta.AfterCursor, nil
-	}
-	return groups, "", nil
+	return groups, getNextPageToken(meta), nil
 }
 
 // ListOrganizations fetch organization list.
@@ -97,12 +88,9 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+		return nil, "", fmt.Errorf("baton-zendesk: failed to fetch org: %w", err)
 	}
-	if meta.HasMore {
-		return orgs, meta.AfterCursor, nil
-	}
-	return orgs, "", nil
+	return orgs, getNextPageToken(meta), nil
 }
 
 // GetGroupMemberships get the memberships of the specified group.
@@ -114,10 +102,7 @@ func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, 
 	if err != nil {
 		return nil, "", err
 	}
-	if meta.HasMore {
-		return memberships, meta.AfterCursor, nil
-	}
-	return memberships, "", nil
+	return memberships, getNextPageToken(meta), nil
 }
 
 // GetUser get an existing user.
@@ -168,10 +153,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 	if err != nil {
 		return nil, "", err
 	}
-	if meta.HasMore {
-		return users, meta.AfterCursor, nil
-	}
-	return users, "", nil
+	return users, getNextPageToken(meta), nil
 }
 
 // GetUserAccountResource creates a new connector resource for a Jamf user account.
@@ -273,7 +255,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		GroupID: groupMemberships.GroupID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch groupmembership: %w", err)
+		return "", zendesk.Page{}, fmt.Errorf("baton-zendesk: failed to fetch groupmembership: %w", err)
 	}
 
 	for _, group := range groups {
@@ -292,7 +274,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		OrganizationID: organizationMemberships.OrganizationID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch organizationmemberships: %w", err)
+		return "", zendesk.Page{}, fmt.Errorf("baton-zendesk: failed to fetch organizationmemberships: %w", err)
 	}
 
 	for _, organization := range organizations {
@@ -364,7 +346,7 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
 	customRole, err := z.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to fetch customroles: %w", err)
+		return nil, fmt.Errorf("baton-zendesk: failed to fetch customroles: %w", err)
 	}
 
 	return customRole, nil

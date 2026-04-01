@@ -108,7 +108,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, err
 	}
 
-	if user.Role == "end-user" {
+	if user.Role == zendesk.UserRoleText(zendesk.UserRoleEndUser) {
 		l.Warn("user must be a team member",
 			zap.Int64("user", user.ID),
 			zap.String("user.Role", user.Role),
@@ -121,19 +121,14 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, err
 	}
 
-	roleMembershipOptions := zendesk.CustomRole{
-		Name: fmt.Sprintf("Custom Role %d ", roleID),
-	}
-	membership, err := r.client.CreateCustomRoleMembership(ctx, roleMembershipOptions)
+	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{"user": map[string]any{"custom_role_id": roleID}})
 	if err != nil {
-		return nil, nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to assign custom role to user: %w", err)
 	}
 
-	l.Warn("Role Membership has been created.",
-		zap.Int64("ID", membership.ID),
-		zap.String("Name", membership.Name),
-		zap.String("Configuration", fmt.Sprintf("%v", membership.Configuration)),
-		zap.Time("CreatedAt", membership.CreatedAt),
+	l.Info("Custom role assigned to user.",
+		zap.Int64("userID", updatedUser.ID),
+		zap.Int64("roleID", roleID),
 	)
 
 	return nil, nil, nil

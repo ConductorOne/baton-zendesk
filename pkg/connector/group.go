@@ -120,11 +120,11 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	l := ctxzap.Extract(ctx)
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only team members can be granted group membership",
+			"baton-zendesk: only team members can be granted group membership",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, nil, fmt.Errorf("zendesk-connector: only users can be granted team membership")
+		return nil, nil, fmt.Errorf("baton-zendesk: only users can be granted team membership")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
@@ -136,7 +136,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	if err != nil {
 		return nil, nil, err
 	}
-	if user.Role == "end-user" {
+	if user.Role == zendesk.UserRoleText(zendesk.UserRoleEndUser) {
 		l.Warn("user must be a team member",
 			zap.Int64("UserID", user.ID),
 			zap.String("user.Role", user.Role),
@@ -155,7 +155,7 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	}
 	membership, err := g.client.CreateGroupMembership(ctx, groupMembershipOptions)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to add team member to a group: %w", err)
 	}
 
 	l.Warn("Membership has been created.",
@@ -176,11 +176,11 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only team members can have group membership revoked",
+			"baton-zendesk: only team members can have group membership revoked",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only team members can have group membership revoked")
+		return nil, fmt.Errorf("baton-zendesk: only team members can have group membership revoked")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
@@ -199,7 +199,7 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	}
 	groupMembershipID, err := g.client.RemoveGroupMembershipByID(ctx, groupMembershipOptions)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to revoke team member: %s", err.Error())
+		return nil, fmt.Errorf("baton-zendesk: failed to revoke team member: %w", err)
 	}
 
 	l.Warn("Membership has been revoked..",

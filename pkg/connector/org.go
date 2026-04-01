@@ -46,7 +46,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to fetch org: %w", err)
 	}
 
 	for _, org := range orgs {
@@ -100,7 +100,7 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opt
 
 	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, opts.PageToken.Token)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zendesk-connector: failed to list org members: %w", err)
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list org members: %w", err)
 	}
 
 	for _, user := range users {
@@ -130,11 +130,11 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	l := ctxzap.Extract(ctx)
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only users can be granted organization membership",
+			"baton-zendesk: only users can be granted organization membership",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, nil, fmt.Errorf("zendesk-connector: only users can be granted organization membership")
+		return nil, nil, fmt.Errorf("baton-zendesk: only users can be granted organization membership")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
@@ -153,7 +153,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	}
 	oganizationMembership, err := o.client.CreateOrganizationMembership(ctx, organizationMembership)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zendesk-connector: failed to add user to an organization: %s", err.Error())
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to add user to an organization: %w", err)
 	}
 
 	l.Warn("Membership has been created.",
@@ -174,11 +174,11 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only users can have organization membership revoked",
+			"baton-zendesk: only users can have organization membership revoked",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only users can have organization membership revoked")
+		return nil, fmt.Errorf("baton-zendesk: only users can have organization membership revoked")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
@@ -197,7 +197,7 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 	}
 	organizationMembershipID, err := o.client.RemoveOrganizationMembershipByID(ctx, organizationMembership)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to revoke organization: %s", err.Error())
+		return nil, fmt.Errorf("baton-zendesk: failed to revoke organization: %w", err)
 	}
 
 	l.Warn("Membership has been revoked..",

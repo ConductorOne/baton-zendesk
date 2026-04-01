@@ -20,7 +20,7 @@ func (c *Connector) populateCache(ctx context.Context, ss sessions.SessionStore,
 	}
 	userMap := make(map[string]zendesk.User, len(users))
 	for _, user := range users {
-		userMap[fmt.Sprintf("%d", user.ID)] = user
+		userMap[strconv.FormatInt(user.ID, 10)] = user
 	}
 	return session.SetManyJSON(ctx, ss, userMap, usersNamespace)
 }
@@ -32,7 +32,7 @@ func (c *Connector) getCachedUsersByIDs(ctx context.Context, ss sessions.Session
 	}
 	keys := make([]string, len(userIDs))
 	for i, id := range userIDs {
-		keys[i] = fmt.Sprintf("%d", id)
+		keys[i] = strconv.FormatInt(id, 10)
 	}
 	cached, err := session.GetManyJSON[zendesk.User](ctx, ss, keys, usersNamespace)
 	if err != nil {
