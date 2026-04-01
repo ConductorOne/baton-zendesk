@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/conductorone/baton-sdk/pkg/session"
@@ -27,7 +28,7 @@ func populateCache(ctx context.Context, ss sessions.SessionStore, users []zendes
 // getCachedUsersByIDs fetches only the specified users from the session store.
 func getCachedUsersByIDs(ctx context.Context, ss sessions.SessionStore, userIDs []int64) (map[int64]zendesk.User, error) {
 	if ss == nil {
-		return nil, nil
+		return nil, fmt.Errorf("baton-zendesk: session store is nil, cannot fetch cached users")
 	}
 	keyToID := make(map[string]int64, len(userIDs))
 	keys := make([]string, len(userIDs))
