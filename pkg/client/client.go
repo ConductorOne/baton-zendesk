@@ -54,7 +54,7 @@ func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zend
 		CommonOptions:    zendesk.CommonOptions{Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return users, getNextPageToken(meta), nil
 }
@@ -66,7 +66,7 @@ func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageT
 		CommonOptions:    zendesk.CommonOptions{PermissionSet: roleID},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return users, getNextPageToken(meta), nil
 }
@@ -77,7 +77,7 @@ func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zen
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return groups, getNextPageToken(meta), nil
 }
@@ -88,7 +88,7 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return orgs, getNextPageToken(meta), nil
 }
@@ -100,7 +100,7 @@ func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, 
 		CommonOptions:    zendesk.CommonOptions{GroupID: groupId},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return memberships, getNextPageToken(meta), nil
 }
@@ -109,20 +109,18 @@ func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, 
 func (z *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User, error) {
 	user, err := z.client.GetUser(ctx, userID)
 	if err != nil {
-		return zendesk.User{}, err
+		return zendesk.User{}, wrapZendeskError(err)
 	}
-
-	return user, err
+	return user, nil
 }
 
 // GetGroupDetails get an existing group.
 func (z *ZendeskClient) GetGroupDetails(ctx context.Context, groupID int64) (zendesk.Group, error) {
 	group, err := z.client.GetGroup(ctx, groupID)
 	if err != nil {
-		return zendesk.Group{}, err
+		return zendesk.Group{}, wrapZendeskError(err)
 	}
-
-	return group, err
+	return group, nil
 }
 
 // GetOrgName get an existing organization name.
@@ -134,7 +132,7 @@ func (z *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (s
 
 	org, err := z.client.GetOrganization(ctx, oID)
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
 	return org.Name, nil
@@ -151,7 +149,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
 	return users, getNextPageToken(meta), nil
 }
@@ -215,7 +213,7 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	data.GroupMemberships = groupMemberships
 	body, err := z.client.Post(ctx, "/group_memberships.json", data)
 	if err != nil {
-		return zendesk.GroupMembership{}, err
+		return zendesk.GroupMembership{}, wrapZendeskError(err)
 	}
 
 	err = json.Unmarshal(body, &result)
@@ -233,7 +231,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		GroupID: groupMemberships.GroupID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, err
+		return "", zendesk.Page{}, wrapZendeskError(err)
 	}
 
 	for _, group := range groups {
@@ -242,7 +240,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		}
 	}
 
-	return "", zendesk.Page{}, err
+	return "", zendesk.Page{}, nil
 }
 
 // GetOrganizationMembershipByUser gets an existing organization membership.
@@ -252,7 +250,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		OrganizationID: organizationMemberships.OrganizationID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, err
+		return "", zendesk.Page{}, wrapZendeskError(err)
 	}
 
 	for _, organization := range organizations {
@@ -261,7 +259,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		}
 	}
 
-	return "", zendesk.Page{}, err
+	return "", zendesk.Page{}, nil
 }
 
 // RemoveGroupMembershipByID removes a user from a group, given a specified
@@ -272,13 +270,16 @@ func (z *ZendeskClient) RemoveGroupMembershipByID(ctx context.Context, groupMemb
 	if err != nil {
 		return "", err
 	}
+	if groupMembershipID == "" {
+		return "", ErrMembershipNotFound
+	}
 
 	err = z.client.Delete(ctx, fmt.Sprintf("/group_memberships/%s", groupMembershipID))
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
-	return groupMembershipID, err
+	return groupMembershipID, nil
 }
 
 // RemoveOrganizationMembershipByID removes a user from an organization, given a specified
@@ -289,13 +290,16 @@ func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, or
 	if err != nil {
 		return "", err
 	}
+	if organizationMembershipID == "" {
+		return "", ErrMembershipNotFound
+	}
 
 	err = z.client.Delete(ctx, fmt.Sprintf("/organization_memberships/%s", organizationMembershipID))
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
-	return organizationMembershipID, err
+	return organizationMembershipID, nil
 }
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org
@@ -307,9 +311,8 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 
 	data.OrganizationMembership = opts
 	body, err := z.client.Post(ctx, "/organization_memberships.json", data)
-
 	if err != nil {
-		return zendesk.OrganizationMembership{}, err
+		return zendesk.OrganizationMembership{}, wrapZendeskError(err)
 	}
 
 	err = json.Unmarshal(body, &result)
@@ -317,14 +320,14 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 		return zendesk.OrganizationMembership{}, err
 	}
 
-	return result.OrganizationMembership, err
+	return result.OrganizationMembership, nil
 }
 
 // GetCustomRoles fetch CustomRoles list.
 func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
 	customRole, err := z.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, err
+		return nil, wrapZendeskError(err)
 	}
 
 	return customRole, nil
@@ -336,7 +339,11 @@ func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#create-user
 func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zendesk.User, error) {
-	return z.client.CreateUser(ctx, user)
+	created, err := z.client.CreateUser(ctx, user)
+	if err != nil {
+		return zendesk.User{}, wrapZendeskError(err)
+	}
+	return created, nil
 }
 
 // UpdateUser updates a user via direct HTTP PUT request with raw data.
@@ -345,7 +352,7 @@ func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zend
 func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[string]any) (zendesk.User, error) {
 	body, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), data)
 	if err != nil {
-		return zendesk.User{}, err
+		return zendesk.User{}, wrapZendeskError(err)
 	}
 
 	var result struct {
@@ -366,13 +373,13 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[s
 func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
 		}
-		return err
+		return wrapZendeskError(err)
 	}
 	return nil
 }
@@ -385,13 +392,13 @@ func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathDeletedUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
 		}
-		return err
+		return wrapZendeskError(err)
 	}
 	return nil
 }
