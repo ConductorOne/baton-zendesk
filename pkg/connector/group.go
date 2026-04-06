@@ -80,6 +80,8 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
 	l := ctxzap.Extract(ctx)
 	var rv []*v2.Grant
+	var usersToCache []zendesk.User
+
 	groupId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 	if err != nil {
 		return nil, nil, err
@@ -108,9 +110,7 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 			if err != nil {
 				return nil, nil, fmt.Errorf("baton-zendesk: failed to get user %d: %w", membership.UserID, err)
 			}
-			if err = populateCache(ctx, opts.Session, []zendesk.User{user}); err != nil {
-				l.Debug("baton-zendesk: failed to populate cache for user", zap.Int64("userID", membership.UserID), zap.Error(err))
-			}
+			usersToCache = append(usersToCache, user)
 		}
 
 		ur, err := getUserResource(user, resourceTypeTeam)
@@ -123,6 +123,12 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 		}
 
 		rv = append(rv, grant.NewGrant(resource, memberEntitlement, ur.Id))
+	}
+
+	if len(usersToCache) > 0 {
+		if err = populateCache(ctx, opts.Session, usersToCache); err != nil {
+			l.Debug("baton-zendesk: failed to populate cache for users on group grants")
+		}
 	}
 
 	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
