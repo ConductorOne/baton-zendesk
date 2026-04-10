@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
@@ -24,7 +25,6 @@ const (
 type groupResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	connector    *Connector
 }
 
 var groupEntitlementAccessLevels = []string{
@@ -38,30 +38,30 @@ func (g *groupResourceType) ResourceType(_ context.Context) *v2.ResourceType {
 
 // List returns all the groups from the database as resource objects.
 // Groups include a GroupTrait because they are the 'shape' of a standard group.
-func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, pToken *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
+func (g *groupResourceType) List(ctx context.Context, parentId *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
 	var (
 		err error
 		ret []*v2.Resource
 	)
 
-	groups, nextPageToken, err := g.client.ListGroups(ctx, pToken.Token)
+	groups, nextPageToken, err := g.client.ListGroups(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list groups: %w", err)
 	}
 
 	for _, group := range groups {
 		res, err := getGroupResource(group, resourceTypeGroup, parentId)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
 
 		ret = append(ret, res)
 	}
 
-	return ret, nextPageToken, nil, nil
+	return ret, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
+func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	var rv []*v2.Entitlement
 	for _, level := range groupEntitlementAccessLevels {
 		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
@@ -74,82 +74,97 @@ func (g *groupResourceType) Entitlements(_ context.Context, resource *v2.Resourc
 		))
 	}
 
-	return rv, "", nil, nil
+	return rv, nil, nil
 }
 
-func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, token *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
+func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	l := ctxzap.Extract(ctx)
 	var rv []*v2.Grant
-	groupId, err := strconv.Atoi(resource.Id.Resource)
+	var usersToCache []zendesk.User
+
+	groupId, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, err
 	}
 
-	users, err := g.connector.cacheUsers(ctx)
-	mapUsers := make(map[int64]zendesk.User)
-	for _, user := range users {
-		mapUsers[user.ID] = user
-	}
+	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, groupId, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list group memberships: %w", err)
 	}
 
-	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, int64(groupId), token.Token)
-	if err != nil {
-		return nil, "", nil, err
+	memberIDs := make([]int64, len(groupMemberships))
+	for i, m := range groupMemberships {
+		memberIDs[i] = m.UserID
 	}
 
-	for _, group := range groupMemberships {
-		userAccountDetail := getUserByID(group.UserID, mapUsers)
-		ur, err := getUserResource(userAccountDetail, resourceTypeTeam)
+	mapUsers, err := getCachedUsersByIDs(ctx, opts.Session, memberIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, membership := range groupMemberships {
+		user, err := getUserByID(membership.UserID, mapUsers)
 		if err != nil {
-			return nil, "", nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
+			l.Debug("baton-zendesk: user not in cache, fetching from API", zap.Int64("userID", membership.UserID))
+			user, err = g.client.GetUser(ctx, membership.UserID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("baton-zendesk: failed to get user %d: %w", membership.UserID, err)
+			}
+			usersToCache = append(usersToCache, user)
 		}
 
-		if userAccountDetail.Role == adminEntitlement {
-			adminsGrant := grant.NewGrant(resource, adminEntitlement, ur.Id)
-			teamAdminsGrant := grant.NewGrant(ur, adminEntitlement, resource.Id)
-			rv = append(rv, adminsGrant, teamAdminsGrant)
+		ur, err := getUserResource(user, resourceTypeTeam)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error creating team_member resource for group %s: %w", resource.Id.Resource, err)
 		}
 
-		membershipGrant := grant.NewGrant(resource, memberEntitlement, ur.Id)
-		teamMembershipGrant := grant.NewGrant(ur, memberEntitlement, resource.Id)
-		rv = append(rv, membershipGrant, teamMembershipGrant)
+		if strings.ToLower(user.Role) == adminEntitlement {
+			rv = append(rv, grant.NewGrant(resource, adminEntitlement, ur.Id))
+		}
+
+		rv = append(rv, grant.NewGrant(resource, memberEntitlement, ur.Id))
 	}
 
-	return rv, nextPageToken, nil, nil
+	if len(usersToCache) > 0 {
+		if err = populateCache(ctx, opts.Session, usersToCache); err != nil {
+			l.Debug("baton-zendesk: failed to populate cache for users on group grants")
+		}
+	}
+
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) (annotations.Annotations, error) {
+func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
 	l := ctxzap.Extract(ctx)
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only team members can be granted group membership",
+			"baton-zendesk: only team members can be granted group membership",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only users can be granted team membership")
+		return nil, nil, fmt.Errorf("baton-zendesk: only users can be granted team membership")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	user, err := g.client.GetUser(ctx, userID)
 	if err != nil {
-		return nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to get user %d: %w", userID, err)
 	}
-	if user.Role == "end-user" {
+	if user.Role == zendesk.UserRoleText(zendesk.UserRoleEndUser) {
 		l.Warn("user must be a team member",
 			zap.Int64("UserID", user.ID),
 			zap.String("user.Role", user.Role),
 		)
-		return nil, fmt.Errorf("user must be a team member")
+		return nil, nil, fmt.Errorf("user must be a team member")
 	}
 
 	groupID, err := strconv.ParseInt(entitlement.Resource.Id.Resource, 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	groupMembershipOptions := zendesk.GroupMembership{
@@ -158,17 +173,17 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	}
 	membership, err := g.client.CreateGroupMembership(ctx, groupMembershipOptions)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to add team member to a group: %s", err.Error())
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to add team member to a group: %w", err)
 	}
 
-	l.Warn("Membership has been created.",
+	l.Debug("Membership has been created.",
 		zap.Int64("ID", membership.ID),
 		zap.Int64("UserID", membership.UserID),
 		zap.Int64("GroupID", membership.GroupID),
 		zap.Time("CreatedAt", membership.CreatedAt),
 	)
 
-	return nil, nil
+	return nil, nil, nil
 }
 
 func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
@@ -179,11 +194,11 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 
 	if principal.Id.ResourceType != resourceTypeTeam.Id {
 		l.Warn(
-			"zendesk-connector: only team members can have group membership revoked",
+			"baton-zendesk: only team members can have group membership revoked",
 			zap.String("principal_type", principal.Id.ResourceType),
 			zap.String("principal_id", principal.Id.Resource),
 		)
-		return nil, fmt.Errorf("zendesk-connector: only team members can have group membership revoked")
+		return nil, fmt.Errorf("baton-zendesk: only team members can have group membership revoked")
 	}
 
 	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
@@ -202,20 +217,19 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	}
 	groupMembershipID, err := g.client.RemoveGroupMembershipByID(ctx, groupMembershipOptions)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to revoke team member: %s", err.Error())
+		return nil, fmt.Errorf("baton-zendesk: failed to revoke team member: %w", err)
 	}
 
-	l.Warn("Membership has been revoked..",
+	l.Debug("Membership has been revoked.",
 		zap.String("groupMembershipID", groupMembershipID),
 	)
 
 	return nil, nil
 }
 
-func groupBuilder(cli *client.ZendeskClient, con *Connector) *groupResourceType {
+func groupBuilder(cli *client.ZendeskClient) *groupResourceType {
 	return &groupResourceType{
 		resourceType: resourceTypeGroup,
 		client:       cli,
-		connector:    con,
 	}
 }

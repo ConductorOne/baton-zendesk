@@ -10,7 +10,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
+	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
@@ -18,7 +18,6 @@ import (
 type teamMemberResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
-	connector    *Connector
 }
 
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -26,10 +25,14 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 }
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
-func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, pt *pagination.Token) ([]*v2.Resource, string, annotations.Annotations, error) {
-	users, err := t.connector.cacheUsers(ctx)
+func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
+	users, nextPageToken, err := t.client.ListUsers(ctx, opts.PageToken.Token)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list users: %w", err)
+	}
+
+	if err := populateCache(ctx, opts.Session, users); err != nil {
+		return nil, nil, err
 	}
 
 	var rv []*v2.Resource
@@ -37,21 +40,20 @@ func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.
 		userCopy := user
 		userResource, err := getTeamResource(&userCopy, t.resourceType)
 		if err != nil {
-			return nil, "", nil, err
+			return nil, nil, err
 		}
-
 		rv = append(rv, userResource)
 	}
 
-	return rv, "", nil, nil
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (t *teamMemberResourceType) Entitlements(ctx context.Context, resource *v2.Resource, pt *pagination.Token) ([]*v2.Entitlement, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
-func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resource, pt *pagination.Token) ([]*v2.Grant, string, annotations.Annotations, error) {
-	return nil, "", nil, nil
+func (t *teamMemberResourceType) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func (t *teamMemberResourceType) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
@@ -137,10 +139,9 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, connector *Connector) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient) *teamMemberResourceType {
 	return &teamMemberResourceType{
 		resourceType: resourceTypeTeam,
 		client:       zendeskClient,
-		connector:    connector,
 	}
 }

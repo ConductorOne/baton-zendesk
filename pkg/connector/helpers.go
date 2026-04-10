@@ -7,7 +7,6 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
-	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"golang.org/x/text/cases"
@@ -27,16 +26,6 @@ func titleCase(s string) string {
 	titleCaser := cases.Title(language.English)
 
 	return titleCaser.String(s)
-}
-
-// Populate entitlement options for zendesk resource.
-func PopulateOptions(displayName, permission, resource string) []ent.EntitlementOption {
-	options := []ent.EntitlementOption{
-		ent.WithDisplayName(fmt.Sprintf("%s Role %s", displayName, permission)),
-		ent.WithDescription(fmt.Sprintf("%s of Zendesk %s %s", permission, displayName, resource)),
-		ent.WithGrantableTo(resourceTypeTeam, resourceTypeGroup),
-	}
-	return options
 }
 
 // getUserRoleResource creates a new connector resource for a Zendesk user.
@@ -94,18 +83,6 @@ func splitFullName(name string) (string, string) {
 	}
 
 	return firstName, lastName
-}
-
-// getUserSupportRoles gets user roles.
-func getUserSupportRoles(users []zendesk.User) map[string]int64 {
-	var supportRoles = make(map[string]int64)
-	for _, user := range users {
-		if !user.Suspended {
-			supportRoles[user.Role] = user.ID
-		}
-	}
-
-	return supportRoles
 }
 
 func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
@@ -187,13 +164,13 @@ func getUserResource(user zendesk.User, resourceTypeUser *v2.ResourceType) (*v2.
 	return resource, nil
 }
 
-// getUserByID gets an user by ID.
-func getUserByID(userID int64, users map[int64]zendesk.User) zendesk.User {
+// getUserByID looks up a user by ID in the provided map.
+// Returns an error if the user is not found, so the caller can fall back to a live API call.
+func getUserByID(userID int64, users map[int64]zendesk.User) (zendesk.User, error) {
 	if user, ok := users[userID]; ok {
-		return user
+		return user, nil
 	}
-
-	return zendesk.User{}
+	return zendesk.User{}, fmt.Errorf("user %d not found in cache", userID)
 }
 
 // getRoleResource creates a new connector resource for a Zendesk role.

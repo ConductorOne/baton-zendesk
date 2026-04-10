@@ -54,12 +54,21 @@ func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zend
 		CommonOptions:    zendesk.CommonOptions{Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
-	if meta.HasMore {
-		return users, meta.AfterCursor, nil
+	return users, getNextPageToken(meta), nil
+}
+
+// ListUsersByRole returns users assigned to a specific custom role, with cursor pagination.
+func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageToken string) ([]zendesk.User, string, error) {
+	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
+		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CommonOptions:    zendesk.CommonOptions{PermissionSet: roleID},
+	})
+	if err != nil {
+		return nil, "", wrapZendeskError(err)
 	}
-	return users, "", nil
+	return users, getNextPageToken(meta), nil
 }
 
 // ListGroups returns all ZendeskClient user groups.
@@ -68,12 +77,9 @@ func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zen
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
-	if meta.HasMore {
-		return groups, meta.AfterCursor, nil
-	}
-	return groups, "", nil
+	return groups, getNextPageToken(meta), nil
 }
 
 // ListOrganizations fetch organization list.
@@ -82,12 +88,9 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("zendesk-connector: failed to fetch org: %w", err)
+		return nil, "", wrapZendeskError(err)
 	}
-	if meta.HasMore {
-		return orgs, meta.AfterCursor, nil
-	}
-	return orgs, "", nil
+	return orgs, getNextPageToken(meta), nil
 }
 
 // GetGroupMemberships get the memberships of the specified group.
@@ -97,32 +100,27 @@ func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, 
 		CommonOptions:    zendesk.CommonOptions{GroupID: groupId},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
-	if meta.HasMore {
-		return memberships, meta.AfterCursor, nil
-	}
-	return memberships, "", nil
+	return memberships, getNextPageToken(meta), nil
 }
 
 // GetUser get an existing user.
 func (z *ZendeskClient) GetUser(ctx context.Context, userID int64) (zendesk.User, error) {
 	user, err := z.client.GetUser(ctx, userID)
 	if err != nil {
-		return zendesk.User{}, err
+		return zendesk.User{}, wrapZendeskError(err)
 	}
-
-	return user, err
+	return user, nil
 }
 
 // GetGroupDetails get an existing group.
 func (z *ZendeskClient) GetGroupDetails(ctx context.Context, groupID int64) (zendesk.Group, error) {
 	group, err := z.client.GetGroup(ctx, groupID)
 	if err != nil {
-		return zendesk.Group{}, err
+		return zendesk.Group{}, wrapZendeskError(err)
 	}
-
-	return group, err
+	return group, nil
 }
 
 // GetOrgName get an existing organization name.
@@ -134,7 +132,7 @@ func (z *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (s
 
 	org, err := z.client.GetOrganization(ctx, oID)
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
 	return org.Name, nil
@@ -151,12 +149,9 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", wrapZendeskError(err)
 	}
-	if meta.HasMore {
-		return users, meta.AfterCursor, nil
-	}
-	return users, "", nil
+	return users, getNextPageToken(meta), nil
 }
 
 // GetUserAccountResource creates a new connector resource for a Jamf user account.
@@ -218,7 +213,7 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	data.GroupMemberships = groupMemberships
 	body, err := z.client.Post(ctx, "/group_memberships.json", data)
 	if err != nil {
-		return zendesk.GroupMembership{}, err
+		return zendesk.GroupMembership{}, wrapZendeskError(err)
 	}
 
 	err = json.Unmarshal(body, &result)
@@ -229,28 +224,6 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	return result.GroupMemberships, nil
 }
 
-// CreateCustomRoleMembership Assigns an agent to a given group.
-//
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/account-configuration/custom_roles/#list-custom-roles
-func (z *ZendeskClient) CreateCustomRoleMembership(ctx context.Context, roleMemberships zendesk.CustomRole) (zendesk.CustomRole, error) {
-	var data, result struct {
-		CustomRoles zendesk.CustomRole `json:"custom_role"`
-	}
-
-	data.CustomRoles = roleMemberships
-	body, err := z.client.Post(ctx, "/custom_roles.json", data)
-	if err != nil {
-		return zendesk.CustomRole{}, err
-	}
-
-	err = json.Unmarshal(body, &result)
-	if err != nil {
-		return zendesk.CustomRole{}, err
-	}
-
-	return result.CustomRoles, nil
-}
-
 // GetGroupMembershipByGroup gets an existing group membership.
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {
 	groups, nextPage, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
@@ -258,7 +231,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		GroupID: groupMemberships.GroupID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch groupmembership: %w", err)
+		return "", zendesk.Page{}, wrapZendeskError(err)
 	}
 
 	for _, group := range groups {
@@ -267,7 +240,7 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 		}
 	}
 
-	return "", zendesk.Page{}, err
+	return "", zendesk.Page{}, nil
 }
 
 // GetOrganizationMembershipByUser gets an existing organization membership.
@@ -277,7 +250,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		OrganizationID: organizationMemberships.OrganizationID,
 	})
 	if err != nil {
-		return "", zendesk.Page{}, fmt.Errorf("zendesk-connector: failed to fetch organizationmemberships: %w", err)
+		return "", zendesk.Page{}, wrapZendeskError(err)
 	}
 
 	for _, organization := range organizations {
@@ -286,7 +259,7 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 		}
 	}
 
-	return "", zendesk.Page{}, err
+	return "", zendesk.Page{}, nil
 }
 
 // RemoveGroupMembershipByID removes a user from a group, given a specified
@@ -297,13 +270,16 @@ func (z *ZendeskClient) RemoveGroupMembershipByID(ctx context.Context, groupMemb
 	if err != nil {
 		return "", err
 	}
+	if groupMembershipID == "" {
+		return "", ErrMembershipNotFound
+	}
 
 	err = z.client.Delete(ctx, fmt.Sprintf("/group_memberships/%s", groupMembershipID))
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
-	return groupMembershipID, err
+	return groupMembershipID, nil
 }
 
 // RemoveOrganizationMembershipByID removes a user from an organization, given a specified
@@ -314,13 +290,16 @@ func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, or
 	if err != nil {
 		return "", err
 	}
+	if organizationMembershipID == "" {
+		return "", ErrMembershipNotFound
+	}
 
 	err = z.client.Delete(ctx, fmt.Sprintf("/organization_memberships/%s", organizationMembershipID))
 	if err != nil {
-		return "", err
+		return "", wrapZendeskError(err)
 	}
 
-	return organizationMembershipID, err
+	return organizationMembershipID, nil
 }
 
 // CreateOrganizationMembership creates an organization membership for an existing user and org
@@ -332,9 +311,8 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 
 	data.OrganizationMembership = opts
 	body, err := z.client.Post(ctx, "/organization_memberships.json", data)
-
 	if err != nil {
-		return zendesk.OrganizationMembership{}, err
+		return zendesk.OrganizationMembership{}, wrapZendeskError(err)
 	}
 
 	err = json.Unmarshal(body, &result)
@@ -342,14 +320,14 @@ func (z *ZendeskClient) CreateOrganizationMembership(ctx context.Context, opts z
 		return zendesk.OrganizationMembership{}, err
 	}
 
-	return result.OrganizationMembership, err
+	return result.OrganizationMembership, nil
 }
 
 // GetCustomRoles fetch CustomRoles list.
 func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRole, error) {
 	customRole, err := z.client.GetCustomRoles(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("zendesk-connector: failed to fetch customroles: %w", err)
+		return nil, wrapZendeskError(err)
 	}
 
 	return customRole, nil
@@ -361,7 +339,11 @@ func (z *ZendeskClient) GetCustomRoles(ctx context.Context) ([]zendesk.CustomRol
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#create-user
 func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zendesk.User, error) {
-	return z.client.CreateUser(ctx, user)
+	created, err := z.client.CreateUser(ctx, user)
+	if err != nil {
+		return zendesk.User{}, wrapZendeskError(err)
+	}
+	return created, nil
 }
 
 // UpdateUser updates a user via direct HTTP PUT request with raw data.
@@ -370,7 +352,7 @@ func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zend
 func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[string]any) (zendesk.User, error) {
 	body, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), data)
 	if err != nil {
-		return zendesk.User{}, err
+		return zendesk.User{}, wrapZendeskError(err)
 	}
 
 	var result struct {
@@ -383,29 +365,6 @@ func (z *ZendeskClient) UpdateUser(ctx context.Context, userID int64, data map[s
 	return result.User, nil
 }
 
-// UpdateUserHttp updates a user via direct HTTP PUT request (no library).
-//
-// This function is only used for enable_user action due to a bug in the Zendesk SDK
-// where the Suspended field has an omitempty JSON tag, preventing unsuspending users
-// (setting suspended=false) through the standard UpdateUser method.
-func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payload map[string]interface{}) (zendesk.User, error) {
-	responseBody, err := z.client.Put(ctx, fmt.Sprintf(pathUser, userID), payload)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-
-	var response struct {
-		User zendesk.User `json:"user"`
-	}
-
-	err = json.Unmarshal(responseBody, &response)
-	if err != nil {
-		return zendesk.User{}, err
-	}
-
-	return response.User, nil
-}
-
 // DeleteUser soft deletes a user.
 //
 // Allowed for: Admins or agents with permission to edit end-user profiles
@@ -414,13 +373,13 @@ func (z *ZendeskClient) UpdateUserHttp(ctx context.Context, userID int64, payloa
 func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
 		}
-		return err
+		return wrapZendeskError(err)
 	}
 	return nil
 }
@@ -433,13 +392,13 @@ func (z *ZendeskClient) DeleteUser(ctx context.Context, userID int64) error {
 func (z *ZendeskClient) PermanentlyDeleteUser(ctx context.Context, userID int64) error {
 	err := z.client.Delete(ctx, fmt.Sprintf(pathDeletedUser, userID))
 	if err != nil {
-		var zErr *zendesk.Error
+		var zErr zendesk.Error
 		if ok := errors.As(err, &zErr); ok {
 			if zErr.Status() == http.StatusOK {
 				return nil
 			}
 		}
-		return err
+		return wrapZendeskError(err)
 	}
 	return nil
 }

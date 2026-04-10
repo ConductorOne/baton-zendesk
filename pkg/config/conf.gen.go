@@ -10,7 +10,7 @@ type Zendesk struct {
 	Orgs []string `mapstructure:"orgs"`
 }
 
-func (c* Zendesk) findFieldByTag(tagValue string) (any, bool) {
+func (c *Zendesk) findFieldByTag(tagValue string) (any, bool) {
 	v := reflect.ValueOf(c).Elem() // Dereference pointer to struct
 	t := v.Type()
 
@@ -42,11 +42,13 @@ func (c *Zendesk) GetString(fieldName string) string {
 	if !ok {
 		return ""
 	}
-	t, ok := v.(string)
-	if !ok {
-		panic("wrong type")
+	if t, ok := v.(string); ok {
+		return t
 	}
-	return t
+	if t, ok := v.([]byte); ok {
+		return string(t)
+	}
+	panic("wrong type")
 }
 
 func (c *Zendesk) GetInt(fieldName string) int {
