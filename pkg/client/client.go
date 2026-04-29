@@ -17,6 +17,11 @@ import (
 const teamMembersRoleAdmin = "admin"
 const teamMembersRoleAgent = "agent"
 
+// cbpPageSize must be set on every CBP request — Zendesk treats requests
+// without page[size] as offset pagination on endpoints that support both,
+// which leaves meta.has_more/after_cursor empty and stops sync after page 1.
+const cbpPageSize = 100
+
 // Zendesk API endpoint paths for direct API calls.
 const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
@@ -50,7 +55,7 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 // ListUsers returns all ZendeskClient users.
 func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zendesk.User, string, error) {
 	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 		CommonOptions:    zendesk.CommonOptions{Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
@@ -62,7 +67,7 @@ func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zend
 // ListUsersByRole returns users assigned to a specific custom role, with cursor pagination.
 func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageToken string) ([]zendesk.User, string, error) {
 	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 		CommonOptions:    zendesk.CommonOptions{PermissionSet: roleID},
 	})
 	if err != nil {
@@ -74,7 +79,7 @@ func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageT
 // ListGroups returns all ZendeskClient user groups.
 func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zendesk.Group, string, error) {
 	groups, meta, err := z.client.GetGroupsCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 	})
 	if err != nil {
 		return nil, "", wrapZendeskError(err)
@@ -85,7 +90,7 @@ func (z *ZendeskClient) ListGroups(ctx context.Context, pageToken string) ([]zen
 // ListOrganizations fetch organization list.
 func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string) ([]zendesk.Organization, string, error) {
 	orgs, meta, err := z.client.GetOrganizationsCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 	})
 	if err != nil {
 		return nil, "", wrapZendeskError(err)
@@ -96,7 +101,7 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 // GetGroupMemberships get the memberships of the specified group.
 func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, pageToken string) ([]zendesk.GroupMembership, string, error) {
 	memberships, meta, err := z.client.GetGroupMembershipsCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 		CommonOptions:    zendesk.CommonOptions{GroupID: groupId},
 	})
 	if err != nil {
@@ -145,7 +150,7 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		return nil, "", err
 	}
 	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageAfter: pageToken},
+		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
 		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
 	})
 	if err != nil {
