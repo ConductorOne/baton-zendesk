@@ -108,7 +108,7 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, err
 	}
 
-	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{"user": map[string]any{"custom_role_id": roleID}})
+	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{userKey: map[string]any{"custom_role_id": roleID}})
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to assign custom role to user: %w", err)
 	}

@@ -68,7 +68,7 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 					Order:       2,
 				},
 				"role": {
-					DisplayName: "Role",
+					DisplayName: roleDisplay,
 					Required:    false,
 					Description: "The role of the user.",
 					Field: &v2.ConnectorAccountCreationSchema_Field_StringField{

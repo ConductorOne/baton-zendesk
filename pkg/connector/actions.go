@@ -26,7 +26,7 @@ func (c *Connector) GlobalActions(ctx context.Context, registry actions.ActionRe
 		Description: "Suspend a Zendesk user account by setting suspended to true",
 		Arguments: []*config_sdk.Field{
 			{
-				Name:        "user_id",
+				Name:        userIDKey,
 				DisplayName: "User ID",
 				Description: "The Zendesk user ID to disable",
 				IsRequired:  true,
@@ -37,7 +37,7 @@ func (c *Connector) GlobalActions(ctx context.Context, registry actions.ActionRe
 		},
 		ReturnTypes: []*config_sdk.Field{
 			{
-				Name:        "success",
+				Name:        successKey,
 				DisplayName: "Success",
 				Field:       &config_sdk.Field_BoolField{},
 			},
@@ -64,7 +64,7 @@ func (c *Connector) GlobalActions(ctx context.Context, registry actions.ActionRe
 		Description: "Unsuspend a Zendesk user account by setting suspended to false",
 		Arguments: []*config_sdk.Field{
 			{
-				Name:        "user_id",
+				Name:        userIDKey,
 				DisplayName: "User ID",
 				Description: "The Zendesk user ID to enable",
 				IsRequired:  true,
@@ -75,7 +75,7 @@ func (c *Connector) GlobalActions(ctx context.Context, registry actions.ActionRe
 		},
 		ReturnTypes: []*config_sdk.Field{
 			{
-				Name:        "success",
+				Name:        successKey,
 				DisplayName: "Success",
 				Field:       &config_sdk.Field_BoolField{},
 			},
@@ -133,14 +133,14 @@ func (c *Connector) handleDisableUser(
 		l.Error("failed to get user", zap.Int64("user_id", userID), zap.Error(err))
 		response := &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				"success": structpb.NewBoolValue(false),
+				successKey: structpb.NewBoolValue(false),
 			},
 		}
 		return response, nil, err
 	}
 
 	body := map[string]any{
-		"user": map[string]any{
+		userKey: map[string]any{
 			"name":      currentUser.Name,
 			"suspended": true,
 		},
@@ -155,7 +155,7 @@ func (c *Connector) handleDisableUser(
 		l.Error("failed to disable user", zap.Int64("user_id", userID), zap.Error(err))
 		response := &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				"success": structpb.NewBoolValue(false),
+				successKey: structpb.NewBoolValue(false),
 			},
 		}
 		return response, nil, err
@@ -163,7 +163,7 @@ func (c *Connector) handleDisableUser(
 
 	response := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			"success": structpb.NewBoolValue(true),
+			successKey: structpb.NewBoolValue(true),
 		},
 	}
 	return response, nil, nil
@@ -194,7 +194,7 @@ func (c *Connector) handleEnableUser(
 	l.Debug("enabling user", zap.Int64("user_id", userID))
 
 	payload := map[string]any{
-		"user": map[string]any{
+		userKey: map[string]any{
 			"suspended": false,
 		},
 	}
@@ -208,7 +208,7 @@ func (c *Connector) handleEnableUser(
 		l.Error("failed to enable user", zap.Int64("user_id", userID), zap.Error(err))
 		response := &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				"success": structpb.NewBoolValue(false),
+				successKey: structpb.NewBoolValue(false),
 			},
 		}
 		return response, nil, err
@@ -218,7 +218,7 @@ func (c *Connector) handleEnableUser(
 
 	return &structpb.Struct{
 		Fields: map[string]*structpb.Value{
-			"success": structpb.NewBoolValue(true),
+			successKey: structpb.NewBoolValue(true),
 		},
 	}, nil, nil
 }
