@@ -29,12 +29,20 @@ var (
 		field.WithDisplayName("Organizations"),
 		field.WithDescription("Limit syncing to specific organizations"),
 	)
+	BaseURLField = field.StringField(
+		"base-url",
+		field.WithDisplayName("Base URL"),
+		field.WithDescription("Override the Zendesk API URL (for testing)"),
+		field.WithHidden(true),
+		field.WithExportTarget(field.ExportTargetCLIOnly),
+	)
 
 	ConfigurationFields = []field.SchemaField{
 		SubdomainField,
 		ApiTokenField,
 		EmailField,
 		OrgsField,
+		BaseURLField,
 	}
 )
 

@@ -17,7 +17,7 @@ var (
 	}
 	resourceTypeRole = &v2.ResourceType{
 		Id:          "role",
-		DisplayName: "Role",
+		DisplayName: roleDisplay,
 		Traits: []v2.ResourceType_Trait{
 			v2.ResourceType_TRAIT_ROLE,
 		},

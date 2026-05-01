@@ -13,6 +13,13 @@ import (
 	"golang.org/x/text/language"
 )
 
+const (
+	userIDKey      = "user_id"
+	successKey     = "success"
+	userKey        = "user"
+	roleDisplay    = "Role"
+)
+
 func v1AnnotationsForResourceType(resourceTypeID string) annotations.Annotations {
 	annos := annotations.Annotations{}
 	annos.Update(&v2.V1Identifier{
@@ -32,7 +39,7 @@ func titleCase(s string) string {
 func getUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
 	firstname, lastname := splitFullName(user.Name)
 	profile := map[string]interface{}{
-		"user_id":    user.ID,
+		userIDKey:   user.ID,
 		"first_name": firstname,
 		"last_name":  lastname,
 		"login":      user.Email,
@@ -89,7 +96,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
-		"user_id":    fmt.Sprint(user.ID),
+		userIDKey:   fmt.Sprint(user.ID),
 		"login":      user.Email,
 		"first_name": firstName,
 		"last_name":  lastName,

@@ -32,15 +32,23 @@ type ZendeskClient struct {
 	client *zendesk.Client
 }
 
-func New(ctx context.Context, httpClient *http.Client, subdomain string, email string, apiToken string) (*ZendeskClient, error) {
+func New(ctx context.Context, httpClient *http.Client, subdomain string, email string, apiToken string, baseURL string) (*ZendeskClient, error) {
 	zc := &ZendeskClient{}
 	client, err := zendesk.NewClient(httpClient)
 	if err != nil {
 		return nil, err
 	}
-	err = client.SetSubdomain(subdomain)
-	if err != nil {
-		return nil, err
+	// Custom base URL takes precedence over subdomain-based URL
+	if baseURL != "" {
+		err = client.SetEndpointURL(baseURL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err = client.SetSubdomain(subdomain)
+		if err != nil {
+			return nil, err
+		}
 	}
 	client.SetCredential(zendesk.NewAPITokenCredential(email, apiToken))
 	zc.client = client
