@@ -39,7 +39,7 @@ func wrapZendeskError(err error) error {
 	case http.StatusUnprocessableEntity:
 		return uhttp.WrapErrors(codes.InvalidArgument, "baton-zendesk: invalid argument", err)
 	case http.StatusTooManyRequests:
-		return uhttp.WrapErrors(codes.ResourceExhausted, "baton-zendesk: rate limit exceeded", err)
+		return uhttp.WrapErrors(codes.Unavailable, "baton-zendesk: rate limit exceeded", err)
 	case http.StatusInternalServerError:
 		return uhttp.WrapErrors(codes.Internal, "baton-zendesk: internal server error", err)
 	case http.StatusServiceUnavailable:
