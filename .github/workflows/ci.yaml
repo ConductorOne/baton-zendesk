@@ -13,12 +13,12 @@ jobs:
       BATON_SUBDOMAIN: ${{ secrets.BATON_SUBDOMAIN }}
       BATON_EMAIL: ${{ secrets.BATON_EMAIL }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
       - name: Install Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Checkout code
-        uses: actions/checkout@v6
       - name: Build baton-zendesk
         run: go build ./cmd/baton-zendesk
 
