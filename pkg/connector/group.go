@@ -173,6 +173,15 @@ func (g *groupResourceType) Grant(ctx context.Context, principal *v2.Resource, e
 	}
 	membership, err := g.client.CreateGroupMembership(ctx, groupMembershipOptions)
 	if err != nil {
+		if isAlreadyExistsError(err) {
+			l.Debug("baton-zendesk: group membership already exists",
+				zap.Int64("user_id", userID),
+				zap.Int64("group_id", groupID),
+			)
+			annos := annotations.New()
+			annos.Update(&v2.GrantAlreadyExists{})
+			return nil, annos, nil
+		}
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to add team member to a group: %w", err)
 	}
 
@@ -217,6 +226,15 @@ func (g *groupResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annota
 	}
 	groupMembershipID, err := g.client.RemoveGroupMembershipByID(ctx, groupMembershipOptions)
 	if err != nil {
+		if isNotFoundError(err) {
+			l.Debug("baton-zendesk: group membership not found; treating revoke as already revoked",
+				zap.Int64("user_id", userID),
+				zap.Int64("group_id", groupID),
+			)
+			annos := annotations.New()
+			annos.Update(&v2.GrantAlreadyRevoked{})
+			return annos, nil
+		}
 		return nil, fmt.Errorf("baton-zendesk: failed to revoke team member: %w", err)
 	}
 

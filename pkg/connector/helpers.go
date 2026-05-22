@@ -1,7 +1,9 @@
 package connector
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -12,6 +14,32 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// isNotFoundError reports whether err is a Zendesk 404 response.
+func isNotFoundError(err error) bool {
+	var zErr zendesk.Error
+	if errors.As(err, &zErr) {
+		return zErr.Status() == http.StatusNotFound
+	}
+	return false
+}
+
+// isAlreadyExistsError reports whether err is Zendesk's 422 RecordInvalid/DuplicateValue
+// response returned when creating a group_membership or organization_membership that
+// already exists. Anchored on the "DuplicateValue" error code (verified live) with
+// "has already been taken" as a defensive fallback.
+func isAlreadyExistsError(err error) bool {
+	var zErr zendesk.Error
+	if !errors.As(err, &zErr) {
+		return false
+	}
+	if zErr.Status() != http.StatusUnprocessableEntity {
+		return false
+	}
+	msg := zErr.Error()
+	return strings.Contains(msg, "DuplicateValue") ||
+		strings.Contains(msg, "has already been taken")
+}
 
 const (
 	userIDKey      = "user_id"

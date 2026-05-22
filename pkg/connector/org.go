@@ -153,6 +153,15 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	}
 	oganizationMembership, err := o.client.CreateOrganizationMembership(ctx, organizationMembership)
 	if err != nil {
+		if isAlreadyExistsError(err) {
+			l.Debug("baton-zendesk: organization membership already exists",
+				zap.Int64("user_id", userID),
+				zap.Int64("organization_id", organizationID),
+			)
+			annos := annotations.New()
+			annos.Update(&v2.GrantAlreadyExists{})
+			return nil, annos, nil
+		}
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to add user to an organization: %w", err)
 	}
 
@@ -197,6 +206,15 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 	}
 	organizationMembershipID, err := o.client.RemoveOrganizationMembershipByID(ctx, organizationMembership)
 	if err != nil {
+		if isNotFoundError(err) {
+			l.Debug("baton-zendesk: organization membership not found; treating revoke as already revoked",
+				zap.Int64("user_id", userID),
+				zap.Int64("organization_id", organizationID),
+			)
+			annos := annotations.New()
+			annos.Update(&v2.GrantAlreadyRevoked{})
+			return annos, nil
+		}
 		return nil, fmt.Errorf("baton-zendesk: failed to revoke organization: %w", err)
 	}
 
