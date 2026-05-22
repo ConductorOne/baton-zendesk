@@ -10,18 +10,31 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
-// isNotFoundError reports whether err is a Zendesk 404 response.
+// isNotFoundError reports whether err represents a missing resource. Covers three shapes:
+//   - the raw Zendesk 404 HTTP response (zendesk.Error with status 404)
+//   - the client-layer wrapped form (gRPC codes.NotFound from wrapZendeskError)
+//   - the client-layer sentinel ErrMembershipNotFound returned when a pre-DELETE
+//     membership lookup finds no matching record
 func isNotFoundError(err error) bool {
-	var zErr zendesk.Error
-	if errors.As(err, &zErr) {
-		return zErr.Status() == http.StatusNotFound
+	if err == nil {
+		return false
 	}
-	return false
+	if errors.Is(err, client.ErrMembershipNotFound) {
+		return true
+	}
+	var zErr zendesk.Error
+	if errors.As(err, &zErr) && zErr.Status() == http.StatusNotFound {
+		return true
+	}
+	return status.Code(err) == codes.NotFound
 }
 
 // isAlreadyExistsError reports whether err is Zendesk's 422 RecordInvalid/DuplicateValue
