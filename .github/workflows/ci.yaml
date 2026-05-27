@@ -7,24 +7,36 @@ on:
       - main
 jobs:
   test:
-    if: false  # Remove this line to enable integration tests
     runs-on: ubuntu-latest
+    env:
+      BATON_API_TOKEN: ${{ secrets.BATON_API_TOKEN }}
+      BATON_SUBDOMAIN: ${{ secrets.BATON_SUBDOMAIN }}
+      BATON_EMAIL: ${{ secrets.BATON_EMAIL }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
       - name: Install Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - name: Checkout code
-        uses: actions/checkout@v6
-      # Build the connector binary, then run sync-test.
-      # Configure with valid entitlement/principal IDs.
-      # Add additional test jobs as needed.
       - name: Build baton-zendesk
         run: go build ./cmd/baton-zendesk
-      - name: Test connector syncing
+
+      # Role test runs FIRST: CXH-1284 — role grant/revoke pre-GET idempotency.
+      # Per .claude/rules/ci-workflows.md: role test before group test (group
+      # membership can cause inherited grants via expansion that confuse role test ordering).
+      - name: Test role grant/revoke
         uses: ConductorOne/github-workflows/actions/sync-test@v4
         with:
           connector: ./baton-zendesk
-          baton-entitlement: '<entitlement-id>'
-          baton-principal: '<principal-id>'
-          baton-principal-type: 'user'
+          baton-entitlement: ${{ vars.BATON_ROLE_ENTITLEMENT }}
+          baton-principal: ${{ vars.BATON_PRINCIPAL }}
+          baton-principal-type: 'team_member'
+
+      - name: Test group grant/revoke
+        uses: ConductorOne/github-workflows/actions/sync-test@v4
+        with:
+          connector: ./baton-zendesk
+          baton-entitlement: ${{ vars.BATON_GROUP_ENTITLEMENT }}
+          baton-principal: ${{ vars.BATON_PRINCIPAL }}
+          baton-principal-type: 'team_member'

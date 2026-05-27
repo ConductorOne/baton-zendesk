@@ -108,6 +108,8 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 		return nil, nil, err
 	}
 
+	// Role assignment via PUT is naturally idempotent: re-assigning the same custom role
+	// returns 200 and is a harmless no-op, so no pre-GET / GrantAlreadyExists is needed.
 	updatedUser, err := r.client.UpdateUser(ctx, userID, map[string]any{userKey: map[string]any{"custom_role_id": roleID}})
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to assign custom role to user: %w", err)
@@ -121,12 +123,52 @@ func (r *roleResourceType) Grant(ctx context.Context, principal *v2.Resource, en
 	return nil, nil, nil
 }
 
-func (r *roleResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotations.Annotations, error) {
-	// TODO(CXH-1284): implement role revoke
-	// - validate principal is resourceTypeTeam
-	// - reject admin role revoke (not supported via custom role model)
-	// - set custom_role_id=0 to revert user to base agent role
-	return nil, fmt.Errorf("baton-zendesk: role revoke not yet implemented")
+func (r *roleResourceType) Revoke(ctx context.Context, g *v2.Grant) (annotations.Annotations, error) {
+	l := ctxzap.Extract(ctx)
+
+	principal := g.Principal
+	entitlement := g.Entitlement
+
+	if principal.Id.ResourceType != resourceTypeTeam.Id {
+		return nil, fmt.Errorf("baton-zendesk: only team members can have role revoked, got %q",
+			principal.Id.ResourceType)
+	}
+
+	// Built-in role entitlements (from StaticEntitlements) have no concrete resource ID.
+	// Revoking would require a downgrade target which isn't modeled here.
+	if entitlement.Resource.Id.Resource == "" {
+		return nil, fmt.Errorf("baton-zendesk: revoking built-in role entitlement %q is not supported; "+
+			"manage role downgrades by assigning a lower role instead", entitlement.Slug)
+	}
+
+	userID, err := strconv.ParseInt(principal.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("baton-zendesk: invalid principal id: %w", err)
+	}
+
+	// Clearing the custom role via PUT is idempotent: if the user already has no custom role
+	// (or it was already cleared), Zendesk returns 200 and the field stays null. A deleted user
+	// surfaces as 404 on the PUT below, so no pre-GET is needed.
+	//
+	// Verified live (CXH-1284 probe): Zendesk rejects custom_role_id=0 with HTTP 400
+	// "Invalid custom role id"; only JSON null clears the field. Use a raw map with a
+	// nil value so encoding/json emits null (the typed UpdateUser would strip via omitempty).
+	if _, err := r.client.UpdateUser(ctx, userID, map[string]any{
+		userKey: map[string]any{"custom_role_id": nil},
+	}); err != nil {
+		if isNotFoundError(err) {
+			annos := annotations.New()
+			annos.Update(&v2.GrantAlreadyRevoked{})
+			return annos, nil
+		}
+		return nil, fmt.Errorf("baton-zendesk: failed to revoke custom role from user %d: %w", userID, err)
+	}
+
+	l.Debug("baton-zendesk: custom role revoked",
+		zap.Int64("user_id", userID),
+		zap.String("role_id", entitlement.Resource.Id.Resource),
+	)
+	return nil, nil
 }
 
 func roleBuilder(c *client.ZendeskClient) *roleResourceType {
