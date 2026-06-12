@@ -14,9 +14,6 @@ import (
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
-const teamMembersRoleAdmin = "admin"
-const teamMembersRoleAgent = "agent"
-
 // cbpPageSize must be set on every CBP request — Zendesk treats requests
 // without page[size] as offset pagination on endpoints that support both,
 // which leaves meta.has_more/after_cursor empty and stops sync after page 1.
@@ -60,11 +57,13 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 	return zc, nil
 }
 
-// ListUsers returns all ZendeskClient users.
-func (z *ZendeskClient) ListUsers(ctx context.Context, pageToken string) ([]zendesk.User, string, error) {
+// ListUsers returns users with the given role using cursor-based pagination.
+// role[] array notation breaks Zendesk's cursor advancement; callers must use
+// the singular role value and manage multi-role passes themselves.
+func (z *ZendeskClient) ListUsers(ctx context.Context, role, pageToken string) ([]zendesk.User, string, error) {
 	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
 		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
+		CommonOptions:    zendesk.CommonOptions{Role: role},
 	})
 	if err != nil {
 		return nil, "", wrapZendeskError(err)
@@ -151,15 +150,15 @@ func (z *ZendeskClient) GetOrgName(ctx context.Context, orgID *v2.ResourceId) (s
 	return org.Name, nil
 }
 
-// GetOrganizationUsers fetch organization users list.
-func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, pageToken string) ([]zendesk.User, string, error) {
+// GetOrganizationUsers returns org users with the given role using cursor-based pagination.
+func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.ResourceId, role, pageToken string) ([]zendesk.User, string, error) {
 	oID, err := strconv.ParseInt(orgID.Resource, 10, 64)
 	if err != nil {
 		return nil, "", err
 	}
 	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
 		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Id: oID, Roles: []string{teamMembersRoleAdmin, teamMembersRoleAgent}},
+		CommonOptions:    zendesk.CommonOptions{Id: oID, Role: role},
 	})
 	if err != nil {
 		return nil, "", wrapZendeskError(err)

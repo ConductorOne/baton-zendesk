@@ -9,6 +9,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
+	"github.com/conductorone/baton-sdk/pkg/pagination"
 	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
@@ -93,16 +94,21 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 }
 
 func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	var (
-		rv  []*v2.Grant
-		err error
-	)
+	bag := &pagination.Bag{}
+	if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
+		return nil, nil, err
+	}
+	if bag.Current() == nil {
+		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAdmin})
+		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAgent})
+	}
 
-	users, nextPageToken, err := o.client.GetOrganizationUsers(ctx, resource.Id, opts.PageToken.Token)
+	users, nextCursor, err := o.client.GetOrganizationUsers(ctx, resource.Id, bag.ResourceTypeID(), bag.PageToken())
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list org members: %w", err)
 	}
 
+	var rv []*v2.Grant
 	for _, user := range users {
 		ur, err := getUserResource(user, resourceTypeTeam)
 		if err != nil {
@@ -123,7 +129,15 @@ func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opt
 		}
 	}
 
-	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
+	if err := bag.Next(nextCursor); err != nil {
+		return nil, nil, err
+	}
+	nextPage, err := bag.Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return rv, &rs.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
