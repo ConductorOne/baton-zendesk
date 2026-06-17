@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,19 @@ const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
 	// Permissions: Admins or agents with access to all tickets.
 	pathDeletedUser = "/deleted_users/%d.json"
+
+	// https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships-by-group-id
+	pathGroupMemberships = "/groups/%d/memberships.json" // GET (list by group)
+
+	// https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
+	pathUserGroupMemberships = "/users/%d/group_memberships.json?page=%d&per_page=%d"
+
+	// https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships
+	pathUserOrganizationMemberships = "/users/%d/organization_memberships.json?page=%d&per_page=%d"
 )
+
+// offsetPageSize is the per_page value for offset-paginated lookups.
+const offsetPageSize = 100
 
 type ZendeskClient struct {
 	client *zendesk.Client
@@ -106,16 +119,31 @@ func (z *ZendeskClient) ListOrganizations(ctx context.Context, pageToken string)
 	return orgs, getNextPageToken(meta), nil
 }
 
-// GetGroupMemberships get the memberships of the specified group.
+// GetGroupMemberships lists memberships for a single group.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships-by-group-id
 func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, pageToken string) ([]zendesk.GroupMembership, string, error) {
-	memberships, meta, err := z.client.GetGroupMembershipsCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{GroupID: groupId},
-	})
+	query := url.Values{}
+	query.Set("page[size]", strconv.Itoa(cbpPageSize))
+	if pageToken != "" {
+		query.Set("page[after]", pageToken)
+	}
+
+	path := fmt.Sprintf(pathGroupMemberships, groupId)
+	body, err := z.client.Get(ctx, path+"?"+query.Encode())
 	if err != nil {
 		return nil, "", wrapZendeskError(err)
 	}
-	return memberships, getNextPageToken(meta), nil
+
+	var result struct {
+		GroupMemberships []zendesk.GroupMembership `json:"group_memberships"`
+		Meta             zendesk.CursorPaginationMeta `json:"meta"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, "", err
+	}
+
+	return result.GroupMemberships, getNextPageToken(result.Meta), nil
 }
 
 // GetUser get an existing user.
@@ -237,49 +265,78 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 	return result.GroupMemberships, nil
 }
 
-// GetGroupMembershipByGroup gets an existing group membership.
-func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {
-	groups, nextPage, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
-		UserID:  groupMemberships.UserID,
-		GroupID: groupMemberships.GroupID,
-	})
-	if err != nil {
-		return "", zendesk.Page{}, wrapZendeskError(err)
-	}
+// GetGroupMembershipByGroup gets the ID of the user's membership in the given group,
+// or "" if the user is not a member of that group.
+//
+// It lists the user's memberships via /users/{user_id}/group_memberships and matches
+// the group ID client-side. The flat /group_memberships.json endpoint ignores
+// group_id when user_id is also set, so filtering there can return a membership
+// in a different group and a revoke would delete the wrong one (CXH-1734).
+func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMembership zendesk.GroupMembership) (string, error) {
+	for page := 1; ; page++ {
+		var result struct {
+			GroupMemberships []zendesk.GroupMembership `json:"group_memberships"`
+			NextPage         *string                   `json:"next_page"`
+		}
 
-	for _, group := range groups {
-		if groupMemberships.UserID == group.UserID {
-			return fmt.Sprintf("%d", group.ID), nextPage, nil
+		body, err := z.client.Get(ctx, fmt.Sprintf(pathUserGroupMemberships, groupMembership.UserID, page, offsetPageSize))
+		if err != nil {
+			return "", wrapZendeskError(err)
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return "", err
+		}
+
+		for _, membership := range result.GroupMemberships {
+			if membership.GroupID == groupMembership.GroupID {
+				return fmt.Sprintf("%d", membership.ID), nil
+			}
+		}
+
+		if result.NextPage == nil {
+			return "", nil
 		}
 	}
-
-	return "", zendesk.Page{}, nil
 }
 
-// GetOrganizationMembershipByUser gets an existing organization membership.
-func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, zendesk.Page, error) {
-	organizations, nextPage, err := z.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
-		UserID:         organizationMemberships.UserID,
-		OrganizationID: organizationMemberships.OrganizationID,
-	})
-	if err != nil {
-		return "", zendesk.Page{}, wrapZendeskError(err)
-	}
+// GetOrganizationMembershipByUser gets the ID of the user's membership in the given
+// organization, or "" if the user is not a member of that organization.
+//
+// It lists the user's memberships via /users/{user_id}/organization_memberships and
+// matches the organization ID client-side, for the same reason as
+// GetGroupMembershipByGroup: the flat endpoint ignores filter query params.
+func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMembership zendesk.OrganizationMembershipListOptions) (string, error) {
+	for page := 1; ; page++ {
+		var result struct {
+			OrganizationMemberships []zendesk.OrganizationMembership `json:"organization_memberships"`
+			NextPage                *string                          `json:"next_page"`
+		}
 
-	for _, organization := range organizations {
-		if organizationMemberships.UserID == organization.UserID {
-			return fmt.Sprintf("%d", organization.ID), nextPage, nil
+		body, err := z.client.Get(ctx, fmt.Sprintf(pathUserOrganizationMemberships, organizationMembership.UserID, page, offsetPageSize))
+		if err != nil {
+			return "", wrapZendeskError(err)
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return "", err
+		}
+
+		for _, membership := range result.OrganizationMemberships {
+			if membership.OrganizationID == organizationMembership.OrganizationID {
+				return fmt.Sprintf("%d", membership.ID), nil
+			}
+		}
+
+		if result.NextPage == nil {
+			return "", nil
 		}
 	}
-
-	return "", zendesk.Page{}, nil
 }
 
 // RemoveGroupMembershipByID removes a user from a group, given a specified
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
 func (z *ZendeskClient) RemoveGroupMembershipByID(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, error) {
-	groupMembershipID, _, err := z.GetGroupMembershipByGroup(ctx, groupMemberships)
+	groupMembershipID, err := z.GetGroupMembershipByGroup(ctx, groupMemberships)
 	if err != nil {
 		return "", err
 	}
@@ -299,7 +356,7 @@ func (z *ZendeskClient) RemoveGroupMembershipByID(ctx context.Context, groupMemb
 //
 // Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships
 func (z *ZendeskClient) RemoveOrganizationMembershipByID(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, error) {
-	organizationMembershipID, _, err := z.GetOrganizationMembershipByUser(ctx, organizationMemberships)
+	organizationMembershipID, err := z.GetOrganizationMembershipByUser(ctx, organizationMemberships)
 	if err != nil {
 		return "", err
 	}
