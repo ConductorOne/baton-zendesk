@@ -10,9 +10,15 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/pagination"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/nukosuke/go-zendesk/zendesk"
+)
+
+const (
+	teamRoleAgent = "agent"
+	teamRoleAdmin = "admin"
 )
 
 type teamMemberResourceType struct {
@@ -26,7 +32,16 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
 func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.ResourceId, opts rs.SyncOpAttrs) ([]*v2.Resource, *rs.SyncOpResults, error) {
-	users, nextPageToken, err := t.client.ListUsers(ctx, opts.PageToken.Token)
+	bag := &pagination.Bag{}
+	if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
+		return nil, nil, err
+	}
+	if bag.Current() == nil {
+		bag.Push(pagination.PageState{ResourceTypeID: teamRoleAdmin})
+		bag.Push(pagination.PageState{ResourceTypeID: teamRoleAgent})
+	}
+
+	users, nextCursor, err := t.client.ListUsers(ctx, bag.ResourceTypeID(), bag.PageToken())
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list users: %w", err)
 	}
@@ -45,7 +60,15 @@ func (t *teamMemberResourceType) List(ctx context.Context, parentResourceID *v2.
 		rv = append(rv, userResource)
 	}
 
-	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
+	if err := bag.Next(nextCursor); err != nil {
+		return nil, nil, err
+	}
+	nextPage, err := bag.Marshal()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return rv, &rs.SyncOpResults{NextPageToken: nextPage}, nil
 }
 
 func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
