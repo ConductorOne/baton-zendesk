@@ -266,7 +266,8 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 	}
 
 	for _, organization := range organizations {
-		if organizationMemberships.UserID == organization.UserID {
+		if organizationMemberships.UserID == organization.UserID &&
+			organizationMemberships.OrganizationID == organization.OrganizationID {
 			return fmt.Sprintf("%d", organization.ID), nextPage, nil
 		}
 	}
