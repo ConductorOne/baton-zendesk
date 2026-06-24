@@ -37,10 +37,10 @@ const (
 	pathGroupMemberships = "/groups/%d/memberships.json" // GET (list by group)
 
 	// https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships
-	pathUserGroupMemberships = "/users/%d/group_memberships.json?page=%d&per_page=%d"
+	pathUserGroupMemberships = "/users/%d/group_memberships.json"
 
 	// https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships
-	pathUserOrganizationMemberships = "/users/%d/organization_memberships.json?page=%d&per_page=%d"
+	pathUserOrganizationMemberships = "/users/%d/organization_memberships.json"
 )
 
 // offsetPageSize is the per_page value for offset-paginated lookups.
@@ -279,7 +279,11 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 			NextPage         *string                   `json:"next_page"`
 		}
 
-		body, err := z.client.Get(ctx, fmt.Sprintf(pathUserGroupMemberships, groupMembership.UserID, page, offsetPageSize))
+		query := url.Values{}
+		query.Set("page", strconv.Itoa(page))
+		query.Set("per_page", strconv.Itoa(offsetPageSize))
+		path := fmt.Sprintf(pathUserGroupMemberships, groupMembership.UserID)
+		body, err := z.client.Get(ctx, path+"?"+query.Encode())
 		if err != nil {
 			return "", wrapZendeskError(err)
 		}
@@ -312,7 +316,11 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 			NextPage                *string                          `json:"next_page"`
 		}
 
-		body, err := z.client.Get(ctx, fmt.Sprintf(pathUserOrganizationMemberships, organizationMembership.UserID, page, offsetPageSize))
+		query := url.Values{}
+		query.Set("page", strconv.Itoa(page))
+		query.Set("per_page", strconv.Itoa(offsetPageSize))
+		path := fmt.Sprintf(pathUserOrganizationMemberships, organizationMembership.UserID)
+		body, err := z.client.Get(ctx, path+"?"+query.Encode())
 		if err != nil {
 			return "", wrapZendeskError(err)
 		}
