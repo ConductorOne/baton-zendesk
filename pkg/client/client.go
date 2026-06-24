@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -14,19 +15,21 @@ import (
 	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
-// cbpPageSize must be set on every CBP request — Zendesk treats requests
-// without page[size] as offset pagination on endpoints that support both,
-// which leaves meta.has_more/after_cursor empty and stops sync after page 1.
+// Without page[size], Zendesk falls back to OBP on dual-mode endpoints and
+// the response omits meta.has_more/after_cursor, stopping sync after page 1.
 const cbpPageSize = 100
 
-// Zendesk API endpoint paths for direct API calls.
 const (
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users
+	pathUsers = "/users.json"
+
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users-in-an-organization
+	pathOrgUsersFmt = "/organizations/%d/users.json"
+
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
-	// Permissions: Admins or agents with permission to edit end-user profiles.
 	pathUser = "/users/%d.json"
 
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
-	// Permissions: Admins or agents with access to all tickets.
 	pathDeletedUser = "/deleted_users/%d.json"
 )
 
@@ -58,29 +61,19 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 }
 
 // ListUsers returns users with the given role using cursor-based pagination.
-// role[] array notation breaks Zendesk's cursor advancement; callers must use
-// the singular role value and manage multi-role passes themselves.
 func (z *ZendeskClient) ListUsers(ctx context.Context, role, pageToken string) ([]zendesk.User, string, error) {
-	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Role: role},
-	})
-	if err != nil {
-		return nil, "", wrapZendeskError(err)
+	params := url.Values{}
+	if role != "" {
+		params.Set("role", role)
 	}
-	return users, getNextPageToken(meta), nil
+	return z.listUsersCBP(ctx, pathUsers, params, pageToken)
 }
 
 // ListUsersByRole returns users assigned to a specific custom role, with cursor pagination.
 func (z *ZendeskClient) ListUsersByRole(ctx context.Context, roleID int64, pageToken string) ([]zendesk.User, string, error) {
-	users, meta, err := z.client.GetUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{PermissionSet: roleID},
-	})
-	if err != nil {
-		return nil, "", wrapZendeskError(err)
-	}
-	return users, getNextPageToken(meta), nil
+	params := url.Values{}
+	params.Set("permission_set", strconv.FormatInt(roleID, 10))
+	return z.listUsersCBP(ctx, pathUsers, params, pageToken)
 }
 
 // ListGroups returns all ZendeskClient user groups.
@@ -156,14 +149,34 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 	if err != nil {
 		return nil, "", err
 	}
-	users, meta, err := z.client.GetOrganizationUsersCBP(ctx, &zendesk.CBPOptions{
-		CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: pageToken},
-		CommonOptions:    zendesk.CommonOptions{Id: oID, Role: role},
-	})
+	params := url.Values{}
+	if role != "" {
+		params.Set("role", role)
+	}
+	return z.listUsersCBP(ctx, fmt.Sprintf(pathOrgUsersFmt, oID), params, pageToken)
+}
+
+// listUsersCBP hand-rolls the URL so go-zendesk's CommonOptions can't emit an
+// empty query= param, which disables CBP on the role-filtered users endpoints (CXH-1907).
+func (z *ZendeskClient) listUsersCBP(ctx context.Context, path string, params url.Values, pageToken string) ([]zendesk.User, string, error) {
+	params.Set("page[size]", strconv.Itoa(cbpPageSize))
+	if pageToken != "" {
+		params.Set("page[after]", pageToken)
+	}
+
+	body, err := z.client.Get(ctx, path+"?"+params.Encode())
 	if err != nil {
 		return nil, "", wrapZendeskError(err)
 	}
-	return users, getNextPageToken(meta), nil
+
+	var data struct {
+		Users []zendesk.User               `json:"users"`
+		Meta  zendesk.CursorPaginationMeta `json:"meta"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, "", fmt.Errorf("baton-zendesk: decode users response: %w", err)
+	}
+	return data.Users, getNextPageToken(data.Meta), nil
 }
 
 // GetUserAccountResource creates a new connector resource for a Jamf user account.
