@@ -43,9 +43,6 @@ const (
 	pathUserOrganizationMemberships = "/users/%d/organization_memberships.json"
 )
 
-// offsetPageSize is the per_page value for offset-paginated lookups.
-const offsetPageSize = 100
-
 type ZendeskClient struct {
 	client *zendesk.Client
 }
@@ -136,7 +133,7 @@ func (z *ZendeskClient) GetGroupMemberships(ctx context.Context, groupId int64, 
 	}
 
 	var result struct {
-		GroupMemberships []zendesk.GroupMembership `json:"group_memberships"`
+		GroupMemberships []zendesk.GroupMembership    `json:"group_memberships"`
 		Meta             zendesk.CursorPaginationMeta `json:"meta"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
@@ -273,15 +270,17 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 // group_id when user_id is also set, so filtering there can return a membership
 // in a different group and a revoke would delete the wrong one (CXH-1734).
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMembership zendesk.GroupMembership) (string, error) {
-	for page := 1; ; page++ {
+	for cursor := ""; ; {
 		var result struct {
-			GroupMemberships []zendesk.GroupMembership `json:"group_memberships"`
-			NextPage         *string                   `json:"next_page"`
+			GroupMemberships []zendesk.GroupMembership    `json:"group_memberships"`
+			Meta             zendesk.CursorPaginationMeta `json:"meta"`
 		}
 
 		query := url.Values{}
-		query.Set("page", strconv.Itoa(page))
-		query.Set("per_page", strconv.Itoa(offsetPageSize))
+		query.Set("page[size]", strconv.Itoa(cbpPageSize))
+		if cursor != "" {
+			query.Set("page[after]", cursor)
+		}
 		path := fmt.Sprintf(pathUserGroupMemberships, groupMembership.UserID)
 		body, err := z.client.Get(ctx, path+"?"+query.Encode())
 		if err != nil {
@@ -297,7 +296,8 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 			}
 		}
 
-		if result.NextPage == nil {
+		cursor = getNextPageToken(result.Meta)
+		if cursor == "" {
 			return "", nil
 		}
 	}
@@ -310,15 +310,17 @@ func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemb
 // matches the organization ID client-side, for the same reason as
 // GetGroupMembershipByGroup: the flat endpoint ignores filter query params.
 func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMembership zendesk.OrganizationMembershipListOptions) (string, error) {
-	for page := 1; ; page++ {
+	for cursor := ""; ; {
 		var result struct {
 			OrganizationMemberships []zendesk.OrganizationMembership `json:"organization_memberships"`
-			NextPage                *string                          `json:"next_page"`
+			Meta                    zendesk.CursorPaginationMeta     `json:"meta"`
 		}
 
 		query := url.Values{}
-		query.Set("page", strconv.Itoa(page))
-		query.Set("per_page", strconv.Itoa(offsetPageSize))
+		query.Set("page[size]", strconv.Itoa(cbpPageSize))
+		if cursor != "" {
+			query.Set("page[after]", cursor)
+		}
 		path := fmt.Sprintf(pathUserOrganizationMemberships, organizationMembership.UserID)
 		body, err := z.client.Get(ctx, path+"?"+query.Encode())
 		if err != nil {
@@ -334,7 +336,8 @@ func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, org
 			}
 		}
 
-		if result.NextPage == nil {
+		cursor = getNextPageToken(result.Meta)
+		if cursor == "" {
 			return "", nil
 		}
 	}
