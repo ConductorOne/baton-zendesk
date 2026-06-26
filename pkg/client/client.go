@@ -31,6 +31,8 @@ const (
 
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
 	pathDeletedUser = "/deleted_users/%d.json"
+
+	userIDKey = "user_id"
 )
 
 type ZendeskClient struct {
@@ -196,7 +198,7 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 	}
 
 	profile := map[string]interface{}{
-		"user_id":    fmt.Sprintf("account:%d", account.ID),
+		userIDKey:   fmt.Sprintf("account:%d", account.ID),
 		"first_name": firstName,
 		"last_name":  lastName,
 		"login":      account.Email,
@@ -251,41 +253,51 @@ func (z *ZendeskClient) CreateGroupMembership(ctx context.Context, groupMembersh
 
 // GetGroupMembershipByGroup gets an existing group membership.
 func (z *ZendeskClient) GetGroupMembershipByGroup(ctx context.Context, groupMemberships zendesk.GroupMembership) (string, zendesk.Page, error) {
-	groups, nextPage, err := z.client.GetGroupMemberships(ctx, &zendesk.GroupMembershipListOptions{
-		UserID:  groupMemberships.UserID,
-		GroupID: groupMemberships.GroupID,
-	})
-	if err != nil {
-		return "", zendesk.Page{}, wrapZendeskError(err)
+	opts := &zendesk.GroupMembershipListOptions{
+		PageOptions: zendesk.PageOptions{Page: 1},
+		UserID:      groupMemberships.UserID,
+		GroupID:     groupMemberships.GroupID,
 	}
-
-	for _, group := range groups {
-		if groupMemberships.UserID == group.UserID {
-			return fmt.Sprintf("%d", group.ID), nextPage, nil
+	for {
+		groups, page, err := z.client.GetGroupMemberships(ctx, opts)
+		if err != nil {
+			return "", zendesk.Page{}, wrapZendeskError(err)
 		}
+		for _, group := range groups {
+			if groupMemberships.UserID == group.UserID && groupMemberships.GroupID == group.GroupID {
+				return fmt.Sprintf("%d", group.ID), page, nil
+			}
+		}
+		if !page.HasNext() {
+			return "", zendesk.Page{}, nil
+		}
+		opts.Page++
 	}
-
-	return "", zendesk.Page{}, nil
 }
 
 // GetOrganizationMembershipByUser gets an existing organization membership.
 func (z *ZendeskClient) GetOrganizationMembershipByUser(ctx context.Context, organizationMemberships zendesk.OrganizationMembershipListOptions) (string, zendesk.Page, error) {
-	organizations, nextPage, err := z.client.GetOrganizationMemberships(ctx, &zendesk.OrganizationMembershipListOptions{
+	opts := &zendesk.OrganizationMembershipListOptions{
+		PageOptions:    zendesk.PageOptions{Page: 1},
 		UserID:         organizationMemberships.UserID,
 		OrganizationID: organizationMemberships.OrganizationID,
-	})
-	if err != nil {
-		return "", zendesk.Page{}, wrapZendeskError(err)
 	}
-
-	for _, organization := range organizations {
-		if organizationMemberships.UserID == organization.UserID &&
-			organizationMemberships.OrganizationID == organization.OrganizationID {
-			return fmt.Sprintf("%d", organization.ID), nextPage, nil
+	for {
+		organizations, page, err := z.client.GetOrganizationMemberships(ctx, opts)
+		if err != nil {
+			return "", zendesk.Page{}, wrapZendeskError(err)
 		}
+		for _, organization := range organizations {
+			if organizationMemberships.UserID == organization.UserID &&
+				organizationMemberships.OrganizationID == organization.OrganizationID {
+				return fmt.Sprintf("%d", organization.ID), page, nil
+			}
+		}
+		if !page.HasNext() {
+			return "", zendesk.Page{}, nil
+		}
+		opts.Page++
 	}
-
-	return "", zendesk.Page{}, nil
 }
 
 // RemoveGroupMembershipByID removes a user from a group, given a specified

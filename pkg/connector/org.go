@@ -182,7 +182,7 @@ func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, ent
 	l.Debug("Membership has been created.",
 		zap.Int64("ID", oganizationMembership.ID),
 		zap.Int64("UserID", oganizationMembership.UserID),
-		zap.Int64("OganizationID", oganizationMembership.OrganizationID),
+		zap.Int64("OrganizationID", oganizationMembership.OrganizationID),
 		zap.Time("CreatedAt", oganizationMembership.CreatedAt),
 	)
 
