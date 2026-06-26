@@ -192,6 +192,106 @@ func TestGetOrganizationUsers_RoleFilteredCBPPaginatesPastFirstPage(t *testing.T
 	}
 }
 
+// CXH-1908 (pagination): the matching membership lives on page 2; the pre-fix
+// callers discarded nextPage so the lookup returned "" and revoke silently
+// became GrantAlreadyRevoked, leaving the user with access.
+func TestGetOrganizationMembershipByUser_FindsMembershipOnPage2(t *testing.T) {
+	const (
+		userID       = int64(42)
+		orgAID       = int64(555) // on page 1 — not what we want
+		orgBID       = int64(777) // on page 2 — the target
+		orgAMemberID = int64(1001)
+		orgBMemberID = int64(1002)
+	)
+
+	nextPageURL := "/organization_memberships.json?page=2"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/organization_memberships.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			// Page 2: contains the target membership, no next page.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"organization_memberships": []map[string]any{
+					{"id": orgBMemberID, "user_id": userID, "organization_id": orgBID},
+				},
+			})
+		} else {
+			// Page 1: only Org A, next_page points to page 2.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"organization_memberships": []map[string]any{
+					{"id": orgAMemberID, "user_id": userID, "organization_id": orgAID},
+				},
+				"next_page": nextPageURL,
+			})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+
+	got, _, err := c.GetOrganizationMembershipByUser(context.Background(), zendesk.OrganizationMembershipListOptions{
+		UserID:         userID,
+		OrganizationID: orgBID,
+	})
+	if err != nil {
+		t.Fatalf("GetOrganizationMembershipByUser: %v", err)
+	}
+	if got != "1002" {
+		t.Fatalf("pagination: expected membership 1002 (org %d, page 2), got %q", orgBID, got)
+	}
+}
+
+// Symmetric pagination test for GetGroupMembershipByGroup: matching membership
+// on page 2, wrong group on page 1 — ensures the loop fix is locked in for
+// the group path just as it is for the org path above.
+func TestGetGroupMembershipByGroup_FindsMembershipOnPage2(t *testing.T) {
+	const (
+		userID        = int64(42)
+		groupAID      = int64(555) // on page 1 — not what we want
+		groupBID      = int64(777) // on page 2 — the target
+		groupAMemID   = int64(1001)
+		groupBMemID   = int64(1002)
+	)
+
+	nextPageURL := "/group_memberships.json?page=2"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/group_memberships.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("page") == "2" {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"group_memberships": []map[string]any{
+					{"id": groupBMemID, "user_id": userID, "group_id": groupBID},
+				},
+			})
+		} else {
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"group_memberships": []map[string]any{
+					{"id": groupAMemID, "user_id": userID, "group_id": groupAID},
+				},
+				"next_page": nextPageURL,
+			})
+		}
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+
+	got, _, err := c.GetGroupMembershipByGroup(context.Background(), zendesk.GroupMembership{
+		UserID:  userID,
+		GroupID: groupBID,
+	})
+	if err != nil {
+		t.Fatalf("GetGroupMembershipByGroup: %v", err)
+	}
+	if got != "1002" {
+		t.Fatalf("pagination: expected membership 1002 (group %d, page 2), got %q", groupBID, got)
+	}
+}
+
 // CXH-1908: when a user belongs to multiple organizations and the API returns
 // every user-matching membership, GetOrganizationMembershipByUser must pick the
 // one whose OrganizationID matches the caller's request. The pre-fix loop
