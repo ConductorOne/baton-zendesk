@@ -89,6 +89,11 @@ func (g *groupResourceType) Grants(ctx context.Context, resource *v2.Resource, o
 
 	groupMemberships, nextPageToken, err := g.client.GetGroupMemberships(ctx, groupId, opts.PageToken.Token)
 	if err != nil {
+		if isSupportProductInactiveError(err) {
+			l.Debug("baton-zendesk: group memberships API unavailable (SupportProductInactive); skipping grants for this group",
+				zap.String("group_id", resource.Id.Resource))
+			return nil, nil, nil
+		}
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list group memberships: %w", err)
 	}
 
