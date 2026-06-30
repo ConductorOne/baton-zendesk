@@ -88,9 +88,6 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
 	_, _, err := d.zendeskClient.ListUsers(ctx, "", "")
 	if err != nil {
-		if isSupportProductInactiveError(err) {
-			return nil, fmt.Errorf("baton-zendesk: this Zendesk instance does not have the Support product active; this connector requires Zendesk Support")
-		}
 		return nil, fmt.Errorf("baton-zendesk: failed to validate credentials: %w", err)
 	}
 	return nil, nil
