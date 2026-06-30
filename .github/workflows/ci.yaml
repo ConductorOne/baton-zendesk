@@ -26,6 +26,7 @@ jobs:
       # Per .claude/rules/ci-workflows.md: role test before group test (group
       # membership can cause inherited grants via expansion that confuse role test ordering).
       - name: Test role grant/revoke
+        if: ${{ vars.BATON_ROLE_ENTITLEMENT != '' }}
         uses: ConductorOne/github-workflows/actions/sync-test@v4
         with:
           connector: ./baton-zendesk
