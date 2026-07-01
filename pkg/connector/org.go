@@ -47,10 +47,6 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 	orgs, nextPageToken, err := o.client.ListOrganizations(ctx, opts.PageToken.Token)
 	if err != nil {
-		if isSupportProductInactiveError(err) {
-			ctxzap.Extract(ctx).Debug("baton-zendesk: organizations API unavailable (SupportProductInactive); skipping organizations")
-			return nil, nil, nil
-		}
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list organizations: %w", err)
 	}
 

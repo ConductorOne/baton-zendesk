@@ -37,18 +37,6 @@ func isNotFoundError(err error) bool {
 	return status.Code(err) == codes.NotFound
 }
 
-// isSupportProductInactiveError reports whether err is Zendesk's 403 SupportProductInactive,
-// returned when the tenant does not have the Zendesk Support product and the endpoint is
-// Support-only (e.g. custom roles).
-func isSupportProductInactiveError(err error) bool {
-	var zErr zendesk.Error
-	if !errors.As(err, &zErr) {
-		return false
-	}
-	return zErr.Status() == http.StatusForbidden &&
-		strings.Contains(zErr.Error(), "SupportProductInactive")
-}
-
 // isAlreadyExistsError reports whether err is Zendesk's 422 RecordInvalid/DuplicateValue
 // response returned when creating a group_membership or organization_membership that
 // already exists. Anchored on the "DuplicateValue" error code (verified live) with

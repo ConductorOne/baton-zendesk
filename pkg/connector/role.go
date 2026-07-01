@@ -32,10 +32,6 @@ func (r *roleResourceType) List(ctx context.Context, parentId *v2.ResourceId, _ 
 	var rv []*v2.Resource
 	customRole, err := r.client.GetCustomRoles(ctx)
 	if err != nil {
-		if isSupportProductInactiveError(err) {
-			ctxzap.Extract(ctx).Debug("baton-zendesk: custom roles API unavailable (SupportProductInactive); skipping custom roles")
-			return nil, nil, nil
-		}
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list custom roles: %w", err)
 	}
 	for _, role := range customRole {
