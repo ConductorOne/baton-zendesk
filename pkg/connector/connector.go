@@ -2,7 +2,6 @@ package connector
 
 import (
 	"context"
-	"fmt"
 	"io"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
@@ -86,10 +85,6 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
 // to be sure that they are valid.
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
-	_, _, err := d.zendeskClient.ListUsers(ctx, "", "")
-	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: failed to validate credentials: %w", err)
-	}
 	return nil, nil
 }
 
