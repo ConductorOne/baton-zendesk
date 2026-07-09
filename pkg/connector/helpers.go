@@ -70,6 +70,19 @@ func v1AnnotationsForResourceType(resourceTypeID string) annotations.Annotations
 	return annos
 }
 
+// withSkipEntitlements appends the SkipEntitlements annotation to the given
+// resource-type annotations. It tells the SDK to skip the per-resource
+// Entitlements() call for this resource type while still invoking
+// StaticEntitlements(). Use it for resource types whose entitlements are
+// identical across every resource (e.g. org, role): the SDK materializes the
+// static entitlements against each resource locally, avoiding one connector
+// round-trip per resource. Grants are unaffected — they reference entitlements
+// by the same canonical ID either way.
+func withSkipEntitlements(annos annotations.Annotations) annotations.Annotations {
+	annos.Update(&v2.SkipEntitlements{})
+	return annos
+}
+
 func titleCase(s string) string {
 	titleCaser := cases.Title(language.English)
 
