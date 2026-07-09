@@ -64,7 +64,6 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 			rs.WithAnnotation(
 				&v2.ExternalLink{Url: org.URL},
 				&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
-				&v2.ChildResourceType{ResourceTypeId: resourceTypeTeam.Id},
 			),
 		)
 		if err != nil {
