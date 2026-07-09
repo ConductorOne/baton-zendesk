@@ -83,10 +83,34 @@ func withSkipEntitlements(annos annotations.Annotations) annotations.Annotations
 	return annos
 }
 
+// withSkipGrants appends the SkipGrants annotation to the given resource-type
+// annotations. It tells the SDK not to call Grants() for this resource type
+// during sync. Used for org: its membership grants are emitted from
+// team_member.Grants (one pass over the small set of team members) instead of
+// one paginated call per organization, which does not scale to 100k+ orgs.
+// Provisioning (Grant/Revoke) is unaffected — SkipGrants only gates sync-time
+// grant listing.
+func withSkipGrants(annos annotations.Annotations) annotations.Annotations {
+	annos.Update(&v2.SkipGrants{})
+	return annos
+}
+
 func titleCase(s string) string {
 	titleCaser := cases.Title(language.English)
 
 	return titleCaser.String(s)
+}
+
+// orgFilterSet builds the org allow-list set from the configured org names. An
+// empty set means "sync all orgs". Both org.List and team_member.Grants filter
+// on this set (by organization name) so the two stay in agreement about which
+// orgs are in scope.
+func orgFilterSet(orgs []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(orgs))
+	for _, o := range orgs {
+		set[o] = struct{}{}
+	}
+	return set
 }
 
 // getUserRoleResource creates a new connector resource for a Zendesk user.

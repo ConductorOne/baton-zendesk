@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
-	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
@@ -105,51 +102,19 @@ func (o *orgResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs
 	return rv, nil, nil
 }
 
-func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	bag := &pagination.Bag{}
-	if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
-		return nil, nil, err
-	}
-	if bag.Current() == nil {
-		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAdmin})
-		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAgent})
-	}
-
-	users, nextCursor, err := o.client.GetOrganizationUsers(ctx, resource.Id, bag.ResourceTypeID(), bag.PageToken())
-	if err != nil {
-		return nil, nil, fmt.Errorf("baton-zendesk: failed to list org members: %w", err)
-	}
-
-	var rv []*v2.Grant
-	for _, user := range users {
-		ur, err := getUserResource(user, resourceTypeTeam)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		roleName := strings.ToLower(user.Role)
-		switch roleName {
-		case orgRoleAdmin, orgRoleAgent:
-			rv = append(rv, grant.NewGrant(resource, roleName, ur.Id, grant.WithAnnotation(&v2.V1Identifier{
-				Id: fmt.Sprintf("org-grant:%s:%d:%s", resource.Id.Resource, user.ID, roleName),
-			})))
-		default:
-			ctxzap.Extract(ctx).Warn("Unknown Zendesk Role Name",
-				zap.String("role_name", roleName),
-				zap.String("zendesk_username", user.Name),
-			)
-		}
-	}
-
-	if err := bag.Next(nextCursor); err != nil {
-		return nil, nil, err
-	}
-	nextPage, err := bag.Marshal()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return rv, &rs.SyncOpResults{NextPageToken: nextPage}, nil
+// Grants is intentionally a no-op. Organization membership grants are emitted
+// from teamMemberResourceType.Grants, which inverts the traversal: it iterates
+// the small set of team members (agents/admins) and lists each member's
+// organization memberships, instead of making role-filtered calls to
+// GetOrganizationUsers once per organization. That per-org fan-out does not
+// scale to tenants with 100k+ organizations.
+//
+// resourceTypeOrg carries the SkipGrants annotation, so the SDK never calls
+// this during sync; it remains only to satisfy the ResourceSyncer interface.
+// The emitted grants still attach to the org resource because the SDK stores
+// grants by their entitlement, not by the resource being synced.
+func (o *orgResourceType) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
@@ -252,15 +217,9 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 }
 
 func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
-	orgMap := make(map[string]struct{})
-
-	for _, o := range orgs {
-		orgMap[o] = struct{}{}
-	}
-
 	return &orgResourceType{
 		resourceType: resourceTypeOrg,
-		filterToOrgs: orgMap,
+		filterToOrgs: orgFilterSet(orgs),
 		client:       c,
 	}
 }

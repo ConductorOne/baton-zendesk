@@ -332,3 +332,83 @@ func TestGetOrganizationMembershipByUser_PicksMatchingOrgWhenUserInMultipleOrgs(
 		t.Fatalf("CXH-1908: expected membership 1002 (org %d), got %q (matched UserID only, returned first row for org %d)", orgBID, got, orgAID)
 	}
 }
+
+// orgMembershipsCBPMock serves /organization_memberships.json with cursor
+// pagination, requiring the user_id filter. Mirrors zendeskCBPMock but for the
+// membership payload consumed by GetUserOrganizationMemberships, and trips the
+// same empty-query= CBP bug so a regression to the hand-rolled URL is caught.
+func orgMembershipsCBPMock(t *testing.T, total int, requireUserID string) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/organization_memberships.json", func(w http.ResponseWriter, r *http.Request) {
+		values := r.URL.Query()
+		if values.Get("user_id") != requireUserID {
+			http.Error(w, fmt.Sprintf("missing user_id=%s", requireUserID), http.StatusBadRequest)
+			return
+		}
+		cbpDisabled := containsEmptyQueryParam(r.URL.RawQuery, "query")
+
+		start := 0
+		if after := values.Get("page[after]"); after != "" {
+			if _, err := fmt.Sscanf(after, "p%d", &start); err != nil {
+				http.Error(w, "bad cursor", http.StatusBadRequest)
+				return
+			}
+		}
+		end := start + 100
+		if end > total {
+			end = total
+		}
+		memberships := make([]zendesk.OrganizationMembership, 0, 100)
+		for i := start; i < end; i++ {
+			memberships = append(memberships, zendesk.OrganizationMembership{
+				ID:             int64(i + 1),
+				UserID:         9001,
+				OrganizationID: int64(i + 1),
+			})
+		}
+
+		body := map[string]any{"organization_memberships": memberships}
+		if !cbpDisabled && end < total {
+			body["meta"] = map[string]any{"has_more": true, "after_cursor": fmt.Sprintf("p%d", end)}
+		} else if !cbpDisabled {
+			body["meta"] = map[string]any{"has_more": false, "after_cursor": ""}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	})
+	return httptest.NewServer(mux)
+}
+
+func drainGetUserOrganizationMemberships(t *testing.T, c *ZendeskClient, userID int64) int {
+	t.Helper()
+	ctx := context.Background()
+	total := 0
+	token := ""
+	for {
+		memberships, next, err := c.GetUserOrganizationMemberships(ctx, userID, token)
+		if err != nil {
+			t.Fatalf("GetUserOrganizationMemberships: %v", err)
+		}
+		total += len(memberships)
+		if next == "" {
+			return total
+		}
+		token = next
+	}
+}
+
+// GetUserOrganizationMemberships backs the inverted org-grant emission in
+// teamMemberResourceType.Grants; it must page past the first 100 memberships or
+// members in many orgs would silently lose grants beyond page 1.
+func TestGetUserOrganizationMemberships_CBPPaginatesPastFirstPage(t *testing.T) {
+	srv := orgMembershipsCBPMock(t, 106, "9001")
+	defer srv.Close()
+
+	c := newTestClient(t, srv.URL)
+	got := drainGetUserOrganizationMemberships(t, c, 9001)
+	if got != 106 {
+		t.Fatalf("expected 106 memberships across both pages, got %d (CBP truncation regression)", got)
+	}
+}

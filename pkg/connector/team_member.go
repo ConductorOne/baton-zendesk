@@ -6,14 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-sdk/pkg/types/sessions"
 	"github.com/conductorone/baton-zendesk/pkg/client"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
+	"go.uber.org/zap"
 )
 
 const (
@@ -24,6 +29,10 @@ const (
 type teamMemberResourceType struct {
 	resourceType *v2.ResourceType
 	client       *client.ZendeskClient
+	// filterToOrgs mirrors org.List's org allow-list so the org grants emitted
+	// here stay in scope with the orgs that were actually synced. Empty means
+	// "all orgs".
+	filterToOrgs map[string]struct{}
 }
 
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -75,8 +84,83 @@ func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource,
 	return nil, nil, nil
 }
 
-func (t *teamMemberResourceType) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	return nil, nil, nil
+// Grants emits this team member's organization membership grants. It inverts
+// the traversal that org.Grants used to perform: rather than listing members
+// once per organization (which does not scale to 100k+ orgs), it lists this
+// member's organization memberships and emits an org grant per membership.
+// resourceTypeOrg skips its own Grants via the SkipGrants annotation; the SDK
+// stores these grants against the org resource because grants are keyed by
+// their entitlement, not by the resource being synced.
+func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	l := ctxzap.Extract(ctx)
+
+	userID, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
+	if err != nil {
+		return nil, nil, fmt.Errorf("baton-zendesk: invalid team member id %q: %w", resource.Id.Resource, err)
+	}
+
+	// The organization_membership payload carries no role, and the org
+	// entitlement granted (admin vs agent) is keyed on the member's global role,
+	// so resolve it from the user cache populated during List.
+	roleName, err := t.resolveMemberRole(ctx, opts.Session, userID)
+	if err != nil {
+		return nil, nil, err
+	}
+	// org exposes only admin/agent entitlements. End-users are never team
+	// members and never reach this path, but guard defensively rather than emit
+	// a grant against a nonexistent entitlement.
+	if roleName != teamRoleAdmin && roleName != teamRoleAgent {
+		l.Warn("baton-zendesk: skipping org grants for team member with unexpected role",
+			zap.Int64("user_id", userID),
+			zap.String("role", roleName),
+		)
+		return nil, &rs.SyncOpResults{}, nil
+	}
+
+	memberships, nextPageToken, err := t.client.GetUserOrganizationMemberships(ctx, userID, opts.PageToken.Token)
+	if err != nil {
+		return nil, nil, fmt.Errorf("baton-zendesk: failed to list organization memberships for user %d: %w", userID, err)
+	}
+
+	rv := make([]*v2.Grant, 0, len(memberships))
+	for _, m := range memberships {
+		// Mirror org.List's allow-list: when an org filter is configured, only
+		// emit grants for orgs that were actually synced. The membership carries
+		// organization_name, the same key org.List filters on, so an out-of-scope
+		// org here would otherwise produce a grant against an org (and entitlement)
+		// that was never synced.
+		if _, ok := t.filterToOrgs[m.Name]; !ok && len(t.filterToOrgs) > 0 {
+			continue
+		}
+
+		orgID := strconv.FormatInt(m.OrganizationID, 10)
+		orgResource := &v2.Resource{
+			Id: &v2.ResourceId{ResourceType: resourceTypeOrg.Id, Resource: orgID},
+		}
+		rv = append(rv, grant.NewGrant(orgResource, roleName, resource.Id, grant.WithAnnotation(&v2.V1Identifier{
+			Id: fmt.Sprintf("org-grant:%s:%d:%s", orgID, userID, roleName),
+		})))
+	}
+
+	return rv, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
+}
+
+// resolveMemberRole returns the member's lowercased Zendesk role (admin/agent).
+// The organization_membership payload has no role field, so it is read from the
+// session user cache populated during List, with a direct user fetch as a
+// fallback on a cache miss (mirrors group.Grants).
+func (t *teamMemberResourceType) resolveMemberRole(ctx context.Context, ss sessions.SessionStore, userID int64) (string, error) {
+	if cached, err := getCachedUsersByIDs(ctx, ss, []int64{userID}); err == nil {
+		if u, ok := cached[userID]; ok {
+			return strings.ToLower(u.Role), nil
+		}
+	}
+
+	user, err := t.client.GetUser(ctx, userID)
+	if err != nil {
+		return "", fmt.Errorf("baton-zendesk: failed to resolve role for user %d: %w", userID, err)
+	}
+	return strings.ToLower(user.Role), nil
 }
 
 func (t *teamMemberResourceType) CreateAccountCapabilityDetails(ctx context.Context) (*v2.CredentialDetailsAccountProvisioning, annotations.Annotations, error) {
@@ -162,9 +246,10 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string) *teamMemberResourceType {
 	return &teamMemberResourceType{
 		resourceType: resourceTypeTeam,
 		client:       zendeskClient,
+		filterToOrgs: orgFilterSet(orgs),
 	}
 }
