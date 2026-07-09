@@ -76,15 +76,28 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 	return ret, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+func (o *orgResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+// StaticEntitlements returns the org access levels as resource-type-level
+// entitlement templates. Every organization exposes the same admin/agent
+// entitlements, so the SDK materializes these against each org locally instead
+// of calling Entitlements() once per org. Paired with the SkipEntitlements
+// annotation on resourceTypeOrg, this removes the per-org entitlement fan-out
+// that does not scale to tenants with 100k+ organizations.
+//
+// The materialized entitlement IDs are identical to the per-resource form
+// (NewEntitlementID(org, level)), so org.Grants and any existing grants keep
+// resolving to the same entitlements. The display name/description are no
+// longer prefixed with the org name because a static template applies to every
+// org uniformly.
+func (o *orgResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
-		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
-			ent.WithDisplayName(fmt.Sprintf("%s Organization %s", resource.DisplayName, titleCase(level))),
-			ent.WithDescription(fmt.Sprintf("Access to %s organization in Zendesk", resource.DisplayName)),
-			ent.WithAnnotation(&v2.V1Identifier{
-				Id: fmt.Sprintf("org:%s:role:%s", resource.Id.Resource, level),
-			}),
+		rv = append(rv, ent.NewPermissionEntitlement(nil, level,
+			ent.WithDisplayName(fmt.Sprintf("Organization %s", titleCase(level))),
+			ent.WithDescription("Access to organization in Zendesk"),
 			ent.WithGrantableTo(resourceTypeTeam),
 		))
 	}
