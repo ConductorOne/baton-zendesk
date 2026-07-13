@@ -34,7 +34,13 @@ jobs:
           baton-principal: ${{ vars.BATON_PRINCIPAL }}
           baton-principal-type: 'team_member'
 
+      # Skipped when unset — mirrors the role test's pattern above. The
+      # tenant backing BATON_GROUP_ENTITLEMENT's Support product has
+      # lapsed (short trial, not practical to keep recreating), so sync
+      # itself fails before grant/revoke ever runs. Re-populate the
+      # variable once a live tenant is available.
       - name: Test group grant/revoke
+        if: ${{ vars.BATON_GROUP_ENTITLEMENT != '' }}
         uses: ConductorOne/github-workflows/actions/sync-test@v4
         with:
           connector: ./baton-zendesk
