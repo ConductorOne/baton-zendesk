@@ -55,10 +55,10 @@ func isAlreadyExistsError(err error) bool {
 }
 
 const (
-	userIDKey      = "user_id"
-	successKey     = "success"
-	userKey        = "user"
-	roleDisplay    = "Role"
+	userIDKey   = "user_id"
+	successKey  = "success"
+	userKey     = "user"
+	roleDisplay = "Role"
 )
 
 func v1AnnotationsForResourceType(resourceTypeID string) annotations.Annotations {
@@ -84,15 +84,31 @@ func withSkipEntitlements(annos annotations.Annotations) annotations.Annotations
 }
 
 // withSkipGrants appends the SkipGrants annotation to the given resource-type
-// annotations. It tells the SDK not to call Grants() for this resource type
-// during sync. Used for org: its membership grants are emitted from
-// team_member.Grants (one pass over the small set of team members) instead of
-// one paginated call per organization, which does not scale to 100k+ orgs.
-// Provisioning (Grant/Revoke) is unaffected — SkipGrants only gates sync-time
-// grant listing.
+// annotations. This documents intent and feeds baton_capabilities.json, but on
+// its own it does NOT stop the SDK from calling Grants() per resource: the
+// sync-time skip check (shouldSkipGrants in baton-sdk) reads annotations off
+// each resource INSTANCE, not the resource type. Every resource of this type
+// must also carry &v2.SkipGrants{} on the instance (e.g. via rs.WithAnnotation
+// in List) for the skip to actually take effect — see org.List. Used for org:
+// its membership grants are emitted from team_member.Grants, which iterates
+// the small set of team members, so cost scales with team member count
+// rather than organization count. Provisioning (Grant/Revoke) is unaffected —
+// SkipGrants only gates sync-time grant listing.
 func withSkipGrants(annos annotations.Annotations) annotations.Annotations {
 	annos.Update(&v2.SkipGrants{})
 	return annos
+}
+
+// orgInScope reports whether name is in scope of the org allow-list. An empty
+// set means "sync all orgs", so every name is in scope. Both org.List and
+// team_member.Grants call this against the set built by orgFilterSet so the
+// two stay in agreement about which orgs are actually synced.
+func orgInScope(filterToOrgs map[string]struct{}, name string) bool {
+	if len(filterToOrgs) == 0 {
+		return true
+	}
+	_, ok := filterToOrgs[name]
+	return ok
 }
 
 func titleCase(s string) string {
@@ -117,7 +133,7 @@ func orgFilterSet(orgs []string) map[string]struct{} {
 func getUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
 	firstname, lastname := splitFullName(user.Name)
 	profile := map[string]interface{}{
-		userIDKey:   user.ID,
+		userIDKey:    user.ID,
 		"first_name": firstname,
 		"last_name":  lastname,
 		"login":      user.Email,
@@ -174,7 +190,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
-		userIDKey:   fmt.Sprint(user.ID),
+		userIDKey:    fmt.Sprint(user.ID),
 		"login":      user.Email,
 		"first_name": firstName,
 		"last_name":  lastName,

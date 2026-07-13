@@ -84,10 +84,10 @@ func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource,
 	return nil, nil, nil
 }
 
-// Grants emits this team member's organization membership grants. It inverts
-// the traversal that org.Grants used to perform: rather than listing members
-// once per organization (which does not scale to 100k+ orgs), it lists this
-// member's organization memberships and emits an org grant per membership.
+// Grants emits this team member's organization membership grants: it lists
+// this member's organization memberships and emits an org grant per
+// membership. Cost scales with team member count rather than organization
+// count.
 // resourceTypeOrg skips its own Grants via the SkipGrants annotation; the SDK
 // stores these grants against the org resource because grants are keyed by
 // their entitlement, not by the resource being synced.
@@ -129,7 +129,7 @@ func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resour
 		// organization_name, the same key org.List filters on, so an out-of-scope
 		// org here would otherwise produce a grant against an org (and entitlement)
 		// that was never synced.
-		if _, ok := t.filterToOrgs[m.Name]; !ok && len(t.filterToOrgs) > 0 {
+		if !orgInScope(t.filterToOrgs, m.Name) {
 			continue
 		}
 
@@ -148,7 +148,9 @@ func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resour
 // resolveMemberRole returns the member's lowercased Zendesk role (admin/agent).
 // The organization_membership payload has no role field, so it is read from the
 // session user cache populated during List, with a direct user fetch as a
-// fallback on a cache miss (mirrors group.Grants).
+// fallback on a cache miss (mirrors group.Grants, including repopulating the
+// cache from the fallback fetch so a repeated miss for the same member doesn't
+// cost another API call).
 func (t *teamMemberResourceType) resolveMemberRole(ctx context.Context, ss sessions.SessionStore, userID int64) (string, error) {
 	if cached, err := getCachedUsersByIDs(ctx, ss, []int64{userID}); err == nil {
 		if u, ok := cached[userID]; ok {
@@ -160,6 +162,13 @@ func (t *teamMemberResourceType) resolveMemberRole(ctx context.Context, ss sessi
 	if err != nil {
 		return "", fmt.Errorf("baton-zendesk: failed to resolve role for user %d: %w", userID, err)
 	}
+
+	if err := populateCache(ctx, ss, []zendesk.User{user}); err != nil {
+		ctxzap.Extract(ctx).Debug("baton-zendesk: failed to populate cache for team member role lookup",
+			zap.Int64("user_id", userID),
+		)
+	}
+
 	return strings.ToLower(user.Role), nil
 }
 

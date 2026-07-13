@@ -49,7 +49,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 	for _, org := range orgs {
 		// If we have a filter, and the org is not in the filter, skip it
-		if _, ok := o.filterToOrgs[org.Name]; !ok && len(o.filterToOrgs) > 0 {
+		if !orgInScope(o.filterToOrgs, org.Name) {
 			continue
 		}
 
@@ -61,6 +61,11 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 			rs.WithAnnotation(
 				&v2.ExternalLink{Url: org.URL},
 				&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
+				// Instance-level SkipGrants: the SDK's shouldSkipGrants check reads
+				// annotations off the resource instance, not resourceTypeOrg's
+				// type-level annotations (which only feed baton_capabilities.json).
+				// Without this, the SDK still calls Grants() once per org.
+				&v2.SkipGrants{},
 			),
 		)
 		if err != nil {
@@ -82,13 +87,13 @@ func (o *orgResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.S
 // entitlements, so the SDK materializes these against each org locally instead
 // of calling Entitlements() once per org. Paired with the SkipEntitlements
 // annotation on resourceTypeOrg, this removes the per-org entitlement fan-out
-// that does not scale to tenants with 100k+ organizations.
+// that does not scale as the organization count grows.
 //
 // The materialized entitlement IDs are identical to the per-resource form
-// (NewEntitlementID(org, level)), so org.Grants and any existing grants keep
-// resolving to the same entitlements. The display name/description are no
-// longer prefixed with the org name because a static template applies to every
-// org uniformly.
+// (NewEntitlementID(org, level)), so team_member.Grants (which emits org
+// membership grants) and any existing grants keep resolving to the same
+// entitlements. The display name/description are no longer prefixed with the
+// org name because a static template applies to every org uniformly.
 func (o *orgResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
@@ -103,13 +108,13 @@ func (o *orgResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs
 }
 
 // Grants is intentionally a no-op. Organization membership grants are emitted
-// from teamMemberResourceType.Grants, which inverts the traversal: it iterates
-// the small set of team members (agents/admins) and lists each member's
-// organization memberships, instead of making role-filtered calls to
-// GetOrganizationUsers once per organization. That per-org fan-out does not
-// scale to tenants with 100k+ organizations.
+// from teamMemberResourceType.Grants, which iterates the small set of team
+// members (agents/admins) and lists each member's organization memberships.
+// Cost scales with team member count rather than organization count.
 //
-// resourceTypeOrg carries the SkipGrants annotation, so the SDK never calls
+// Each org resource built in List carries an instance-level SkipGrants
+// annotation (resourceTypeOrg's type-level SkipGrants alone is not enough —
+// the SDK's skip check reads instance annotations), so the SDK never calls
 // this during sync; it remains only to satisfy the ResourceSyncer interface.
 // The emitted grants still attach to the org resource because the SDK stores
 // grants by their entitlement, not by the resource being synced.
