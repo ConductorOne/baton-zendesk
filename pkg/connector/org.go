@@ -81,11 +81,9 @@ func (o *orgResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.S
 }
 
 // StaticEntitlements returns the org access levels as resource-type-level
-// entitlement templates. Every organization exposes the same admin/agent
-// entitlements, so the SDK materializes these against each org locally instead
-// of calling Entitlements() once per org. Paired with the SkipEntitlements
-// annotation on resourceTypeOrg, this removes the per-org entitlement fan-out
-// that does not scale to tenants with 100k+ organizations.
+// entitlement templates, shared across every organization. Paired with the
+// SkipEntitlements annotation on resourceTypeOrg, the SDK materializes these
+// against each org locally, so cost is independent of organization count.
 //
 // The materialized entitlement IDs are identical to the per-resource form
 // (NewEntitlementID(org, level)), so org.Grants and any existing grants keep
