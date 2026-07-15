@@ -110,8 +110,7 @@ func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resour
 	// members and never reach this path, but guard defensively rather than emit
 	// a grant against a nonexistent entitlement.
 	if roleName != teamRoleAdmin && roleName != teamRoleAgent {
-		l.Warn("baton-zendesk: skipping org grants for team member with unexpected role",
-			zap.Int64("user_id", userID),
+		l.Debug("baton-zendesk: skipping org grants for team member with unexpected role",
 			zap.String("role", roleName),
 		)
 		return nil, &rs.SyncOpResults{}, nil
