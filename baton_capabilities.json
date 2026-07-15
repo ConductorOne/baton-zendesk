@@ -23,6 +23,12 @@
           {
             "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
             "id": "org"
+          },
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlements"
+          },
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipGrants"
           }
         ]
       },
@@ -38,6 +44,11 @@
         "displayName": "Role",
         "traits": [
           "TRAIT_ROLE"
+        ],
+        "annotations": [
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlements"
+          }
         ]
       },
       "capabilities": [

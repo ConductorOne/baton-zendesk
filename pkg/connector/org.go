@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	ent "github.com/conductorone/baton-sdk/pkg/types/entitlement"
-	"github.com/conductorone/baton-sdk/pkg/pagination"
-	"github.com/conductorone/baton-sdk/pkg/types/grant"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
@@ -52,7 +49,7 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 
 	for _, org := range orgs {
 		// If we have a filter, and the org is not in the filter, skip it
-		if _, ok := o.filterToOrgs[org.Name]; !ok && len(o.filterToOrgs) > 0 {
+		if !orgInScope(o.filterToOrgs, org.Name) {
 			continue
 		}
 
@@ -64,6 +61,11 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 			rs.WithAnnotation(
 				&v2.ExternalLink{Url: org.URL},
 				&v2.V1Identifier{Id: fmt.Sprintf("org:%d", org.ID)},
+				// Instance-level SkipGrants: the SDK's shouldSkipGrants check reads
+				// annotations off the resource instance, not resourceTypeOrg's
+				// type-level annotations (which only feed baton_capabilities.json).
+				// Without this, the SDK still calls Grants() once per org.
+				&v2.SkipGrants{},
 			),
 		)
 		if err != nil {
@@ -76,15 +78,26 @@ func (o *orgResourceType) List(ctx context.Context, parentResourceID *v2.Resourc
 	return ret, &rs.SyncOpResults{NextPageToken: nextPageToken}, nil
 }
 
-func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+func (o *orgResourceType) Entitlements(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
+	return nil, nil, nil
+}
+
+// StaticEntitlements returns the org access levels as resource-type-level
+// entitlement templates, shared across every organization. Paired with the
+// SkipEntitlements annotation on resourceTypeOrg, the SDK materializes these
+// against each org locally, so cost is independent of organization count.
+//
+// The materialized entitlement IDs are identical to the per-resource form
+// (NewEntitlementID(org, level)), so team_member.Grants (which emits org
+// membership grants) and any existing grants keep resolving to the same
+// entitlements. The display name/description are no longer prefixed with the
+// org name because a static template applies to every org uniformly.
+func (o *orgResourceType) StaticEntitlements(_ context.Context, _ rs.SyncOpAttrs) ([]*v2.Entitlement, *rs.SyncOpResults, error) {
 	rv := make([]*v2.Entitlement, 0, len(orgAccessLevels))
 	for _, level := range orgAccessLevels {
-		rv = append(rv, ent.NewPermissionEntitlement(resource, level,
-			ent.WithDisplayName(fmt.Sprintf("%s Organization %s", resource.DisplayName, titleCase(level))),
-			ent.WithDescription(fmt.Sprintf("Access to %s organization in Zendesk", resource.DisplayName)),
-			ent.WithAnnotation(&v2.V1Identifier{
-				Id: fmt.Sprintf("org:%s:role:%s", resource.Id.Resource, level),
-			}),
+		rv = append(rv, ent.NewPermissionEntitlement(nil, level,
+			ent.WithDisplayName(fmt.Sprintf("Organization %s", titleCase(level))),
+			ent.WithDescription("Access to organization in Zendesk"),
 			ent.WithGrantableTo(resourceTypeTeam),
 		))
 	}
@@ -92,51 +105,19 @@ func (o *orgResourceType) Entitlements(_ context.Context, resource *v2.Resource,
 	return rv, nil, nil
 }
 
-func (o *orgResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	bag := &pagination.Bag{}
-	if err := bag.Unmarshal(opts.PageToken.Token); err != nil {
-		return nil, nil, err
-	}
-	if bag.Current() == nil {
-		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAdmin})
-		bag.Push(pagination.PageState{ResourceTypeID: orgRoleAgent})
-	}
-
-	users, nextCursor, err := o.client.GetOrganizationUsers(ctx, resource.Id, bag.ResourceTypeID(), bag.PageToken())
-	if err != nil {
-		return nil, nil, fmt.Errorf("baton-zendesk: failed to list org members: %w", err)
-	}
-
-	var rv []*v2.Grant
-	for _, user := range users {
-		ur, err := getUserResource(user, resourceTypeTeam)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		roleName := strings.ToLower(user.Role)
-		switch roleName {
-		case orgRoleAdmin, orgRoleAgent:
-			rv = append(rv, grant.NewGrant(resource, roleName, ur.Id, grant.WithAnnotation(&v2.V1Identifier{
-				Id: fmt.Sprintf("org-grant:%s:%d:%s", resource.Id.Resource, user.ID, roleName),
-			})))
-		default:
-			ctxzap.Extract(ctx).Warn("Unknown Zendesk Role Name",
-				zap.String("role_name", roleName),
-				zap.String("zendesk_username", user.Name),
-			)
-		}
-	}
-
-	if err := bag.Next(nextCursor); err != nil {
-		return nil, nil, err
-	}
-	nextPage, err := bag.Marshal()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return rv, &rs.SyncOpResults{NextPageToken: nextPage}, nil
+// Grants is intentionally a no-op. Organization membership grants are emitted
+// from teamMemberResourceType.Grants, which iterates the small set of team
+// members (agents/admins) and lists each member's organization memberships.
+// Cost scales with team member count rather than organization count.
+//
+// Each org resource built in List carries an instance-level SkipGrants
+// annotation (resourceTypeOrg's type-level SkipGrants alone is not enough —
+// the SDK's skip check reads instance annotations), so the SDK never calls
+// this during sync; it remains only to satisfy the ResourceSyncer interface.
+// The emitted grants still attach to the org resource because the SDK stores
+// grants by their entitlement, not by the resource being synced.
+func (o *orgResourceType) Grants(_ context.Context, _ *v2.Resource, _ rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	return nil, nil, nil
 }
 
 func (o *orgResourceType) Grant(ctx context.Context, principal *v2.Resource, entitlement *v2.Entitlement) ([]*v2.Grant, annotations.Annotations, error) {
@@ -239,15 +220,9 @@ func (o *orgResourceType) Revoke(ctx context.Context, grant *v2.Grant) (annotati
 }
 
 func orgBuilder(c *client.ZendeskClient, orgs []string) *orgResourceType {
-	orgMap := make(map[string]struct{})
-
-	for _, o := range orgs {
-		orgMap[o] = struct{}{}
-	}
-
 	return &orgResourceType{
 		resourceType: resourceTypeOrg,
-		filterToOrgs: orgMap,
+		filterToOrgs: orgFilterSet(orgs),
 		client:       c,
 	}
 }

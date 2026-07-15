@@ -13,7 +13,7 @@ var (
 	resourceTypeOrg = &v2.ResourceType{
 		Id:          "org",
 		DisplayName: "Org",
-		Annotations: v1AnnotationsForResourceType("org"),
+		Annotations: withSkipGrants(withSkipEntitlements(v1AnnotationsForResourceType("org"))),
 	}
 	resourceTypeRole = &v2.ResourceType{
 		Id:          "role",
@@ -21,6 +21,7 @@ var (
 		Traits: []v2.ResourceType_Trait{
 			v2.ResourceType_TRAIT_ROLE,
 		},
+		Annotations: withSkipEntitlements(nil),
 	}
 	resourceTypeTeam = &v2.ResourceType{
 		Id:          "team_member",
