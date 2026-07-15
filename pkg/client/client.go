@@ -32,6 +32,9 @@ const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
 	pathDeletedUser = "/deleted_users/%d.json"
 
+	// https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships
+	pathOrgMemberships = "/organization_memberships.json"
+
 	userIDKey = "user_id"
 )
 
@@ -156,6 +159,36 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 		params.Set("role", role)
 	}
 	return z.listUsersCBP(ctx, fmt.Sprintf(pathOrgUsersFmt, oID), params, pageToken)
+}
+
+// GetUserOrganizationMemberships returns all organization memberships for a user
+// using cursor-based pagination. Each membership carries the user_id/organization_id
+// pair used to emit organization grants from the team-member side (see
+// teamMemberResourceType.Grants).
+//
+// The URL is hand-rolled for the same reason as listUsersCBP: go-zendesk's option
+// encoder emits an empty query= param that silently disables CBP on this endpoint (CXH-1907).
+func (z *ZendeskClient) GetUserOrganizationMemberships(ctx context.Context, userID int64, pageToken string) ([]zendesk.OrganizationMembership, string, error) {
+	params := url.Values{}
+	params.Set("user_id", strconv.FormatInt(userID, 10))
+	params.Set("page[size]", strconv.Itoa(cbpPageSize))
+	if pageToken != "" {
+		params.Set("page[after]", pageToken)
+	}
+
+	body, err := z.client.Get(ctx, pathOrgMemberships+"?"+params.Encode())
+	if err != nil {
+		return nil, "", wrapZendeskError(err)
+	}
+
+	var data struct {
+		OrganizationMemberships []zendesk.OrganizationMembership `json:"organization_memberships"`
+		Meta                    zendesk.CursorPaginationMeta     `json:"meta"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, "", fmt.Errorf("baton-zendesk: decode organization memberships response: %w", err)
+	}
+	return data.OrganizationMemberships, getNextPageToken(data.Meta), nil
 }
 
 // listUsersCBP hand-rolls the URL so go-zendesk's CommonOptions can't emit an

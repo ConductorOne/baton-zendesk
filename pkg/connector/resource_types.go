@@ -13,7 +13,7 @@ var (
 	resourceTypeOrg = &v2.ResourceType{
 		Id:          "org",
 		DisplayName: "Org",
-		Annotations: withSkipEntitlements(v1AnnotationsForResourceType("org")),
+		Annotations: withSkipGrants(withSkipEntitlements(v1AnnotationsForResourceType("org"))),
 	}
 	resourceTypeRole = &v2.ResourceType{
 		Id:          "role",
