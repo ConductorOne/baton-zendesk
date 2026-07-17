@@ -83,26 +83,10 @@ func withSkipEntitlements(annos annotations.Annotations) annotations.Annotations
 	return annos
 }
 
-// withSkipGrants appends the SkipGrants annotation to the given resource-type
-// annotations. This documents intent and feeds baton_capabilities.json, but on
-// its own it does NOT stop the SDK from calling Grants() per resource: the
-// sync-time skip check (shouldSkipGrants in baton-sdk) reads annotations off
-// each resource INSTANCE, not the resource type. Every resource of this type
-// must also carry &v2.SkipGrants{} on the instance (e.g. via rs.WithAnnotation
-// in List) for the skip to actually take effect — see org.List. Used for org:
-// its membership grants are emitted from team_member.Grants, which iterates
-// the small set of team members, so cost scales with team member count
-// rather than organization count. Provisioning (Grant/Revoke) is unaffected —
-// SkipGrants only gates sync-time grant listing.
-func withSkipGrants(annos annotations.Annotations) annotations.Annotations {
-	annos.Update(&v2.SkipGrants{})
-	return annos
-}
-
 // orgInScope reports whether name is in scope of the org allow-list. An empty
-// set means "sync all orgs", so every name is in scope. Both org.List and
-// team_member.Grants call this against the set built by orgFilterSet so the
-// two stay in agreement about which orgs are actually synced.
+// set means "sync all orgs", so every name is in scope. org.List calls this
+// against the set built by orgFilterSet to decide which orgs are synced; org
+// grants follow because org.Grants only runs for the orgs List returned.
 func orgInScope(filterToOrgs map[string]struct{}, name string) bool {
 	if len(filterToOrgs) == 0 {
 		return true
@@ -118,9 +102,8 @@ func titleCase(s string) string {
 }
 
 // orgFilterSet builds the org allow-list set from the configured org names. An
-// empty set means "sync all orgs". Both org.List and team_member.Grants filter
-// on this set (by organization name) so the two stay in agreement about which
-// orgs are in scope.
+// empty set means "sync all orgs". org.List filters on this set (by
+// organization name) to decide which orgs are in scope.
 func orgFilterSet(orgs []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(orgs))
 	for _, o := range orgs {

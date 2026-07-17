@@ -1,10 +1,15 @@
 # Test server
 
-Mock Zendesk API for baton-zendesk, used to validate the org/team_member
-grant-inversion fix (CXH-1955/CXH-29) locally, without a real Support-enabled
-tenant. Not wired into CI — this was built to validate one specific fix on
-`felipelucero/cxh-29-invert-org-grants-fixes`, see `/create-ci-tests` if it
-should become a permanent CI fixture.
+Mock Zendesk API for baton-zendesk, used to validate org/team_member sync and
+org membership provisioning locally, without a real Support-enabled tenant. Not
+wired into CI — see `/create-ci-tests` if it should become a permanent CI
+fixture.
+
+Note: org membership grants are emitted per-organization from `org.Grants`
+(`/organizations/{id}/users.json?role=X`). The per-team-member inversion that
+CXH-1955 briefly shipped was reverted because that endpoint under-reports
+agent/admin↔org associations on real tenants; this mock derives org users from
+the same seeded memberships, so both traversals agree here.
 
 ## Auth
 
@@ -19,6 +24,7 @@ should become a permanent CI fixture.
 | `/organizations.json` | GET (CBP) | https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/#list-organizations |
 | `/users.json` | GET (CBP, `role=admin\|agent`) | https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users |
 | `/users/{id}.json` | GET | https://developer.zendesk.com/api-reference/ticketing/users/users/#show-user |
+| `/organizations/{id}/users.json` | GET (CBP, `role=admin\|agent`) | https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/#list-users-in-an-organization |
 | `/organization_memberships.json` | GET (CBP or OBP, dispatches on `page[size]`/`page[after]` vs `page`), POST | https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/ |
 | `/organization_memberships/{id}` | DELETE (no `.json` — matches `pkg/client/client.go`) | https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#delete-membership |
 | `/groups.json` | GET (CBP) | https://developer.zendesk.com/api-reference/ticketing/groups/groups/#list-groups |
@@ -47,8 +53,8 @@ sync and org membership provisioning paths.
 | 7 (Wonka Inc) | `org:7:agent` | Carol (103) |
 | 8 (Hooli) | `org:8:agent` | Carol (103) |
 
-Dave (104, admin) has no org memberships — exercises team_member.Grants'
-empty-grants path.
+Dave (104, admin) has no org memberships — he appears in no org's user list, so
+org.Grants emits no grant for him (exercises the no-membership path).
 
 ## Running locally
 
@@ -73,16 +79,16 @@ baton grants --file /tmp/sync-test.c1z --output-format json | \
   jq '[.grants[] | select(.grant.entitlement.resource.id.resourceType=="org")] | length'
 # -> 8
 
-# Confirm team_member count matches the seeded roster (no orgs×team_members
-# fanout — this is the bug CXH-29/CXH-1955 exists to prevent):
+# Confirm team_member count matches the seeded roster (team_member.List's
+# admin+agent passes don't fan out beyond the roster):
 baton resources --file /tmp/sync-test.c1z --resource-type=team_member --output-format json | \
   jq '.resources | length'
 # -> 4
 
-# Confirm the old per-org endpoint (GetOrganizationUsers) was never called —
-# org.Grants is a no-op now, but this proves it, straight from the request log:
+# Confirm org.Grants exercised the per-org GetOrganizationUsers endpoint
+# (one admin + one agent pass per org), straight from the request log:
 curl -s http://127.0.0.1:8765/__debug/calls | jq '.calls | to_entries | map(select(.key | test("organizations/.*/users.json")))'
-# -> []
+# -> non-empty (one entry per org path hit)
 ```
 
 ## Curl examples

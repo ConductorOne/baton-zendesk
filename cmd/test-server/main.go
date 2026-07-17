@@ -26,6 +26,7 @@ func run() error {
 	// the ".json" suffix can't sit in the same {id} wildcard — capture it and
 	// strip the suffix in the handler instead.
 	mux.HandleFunc("GET /users/{idWithExt}", requireAuth(srv.handleGetUser))
+	mux.HandleFunc("GET /organizations/{id}/users.json", requireAuth(srv.handleListOrgUsers))
 	mux.HandleFunc("GET /organization_memberships.json", requireAuth(srv.handleOrgMemberships))
 	mux.HandleFunc("POST /organization_memberships.json", requireAuth(srv.handleOrgMemberships))
 	mux.HandleFunc("DELETE /organization_memberships/{id}", requireAuth(srv.handleDeleteOrgMembership))
@@ -34,9 +35,9 @@ func run() error {
 	mux.HandleFunc("GET /custom_roles.json", requireAuth(srv.handleListCustomRoles))
 
 	// Debug-only, not part of the Zendesk API: exposes the per-path call
-	// counters so a validation script can assert the old per-org
-	// GetOrganizationUsers endpoint (/organizations/{id}/users.json) is never
-	// hit after the org.Grants -> team_member.Grants inversion.
+	// counters so a validation script can inspect which endpoints a sync hit
+	// (e.g. to confirm org.Grants makes its per-org GetOrganizationUsers passes
+	// over /organizations/{id}/users.json).
 	mux.HandleFunc("GET /__debug/calls", srv.handleDebugCalls)
 
 	httpSrv := &http.Server{
@@ -60,8 +61,8 @@ func run() error {
 }
 
 // recordingMiddleware tallies every request by method+path in state, so a
-// validation run can inspect GET /__debug/calls afterward (e.g. to assert
-// the old per-org GetOrganizationUsers endpoint was never hit). It
+// validation run can inspect GET /__debug/calls afterward (e.g. to confirm the
+// per-org GetOrganizationUsers endpoint was exercised by org.Grants). It
 // deliberately does not log the raw path/query to stdout — request data
 // reaching a log sink is exactly the log-injection pattern gosec's G706
 // flags, and the call-count map already gives the same visibility safely.

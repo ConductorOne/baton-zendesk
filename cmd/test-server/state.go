@@ -61,9 +61,8 @@ type State struct {
 
 	// callCounts records every request path this server has served, keyed by
 	// r.Method+" "+r.URL.Path (query string stripped). Used by /__debug/calls
-	// to assert the old per-org GetOrganizationUsers endpoint
-	// (/organizations/{id}/users.json) is never hit after the org.Grants ->
-	// team_member.Grants inversion.
+	// to inspect which endpoints a sync hit — e.g. org.Grants' per-org
+	// GetOrganizationUsers passes over /organizations/{id}/users.json.
 	callCounts map[string]int
 }
 
@@ -165,6 +164,27 @@ func (s *State) ListMembershipsByUser(userID int64) []*OrgMembership {
 			cp := *m
 			out = append(out, &cp)
 		}
+	}
+	return out
+}
+
+// ListOrgUsersByRole returns the org's members that have the given role, in
+// membership insertion order — backs GetOrganizationUsers (org.Grants), which
+// makes one role-filtered pass per role over /organizations/{id}/users.json.
+func (s *State) ListOrgUsersByRole(orgID int64, role string) []*TeamMember {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []*TeamMember
+	for _, m := range s.membershipList {
+		if m.OrganizationID != orgID {
+			continue
+		}
+		u, ok := s.users[m.UserID]
+		if !ok || (role != "" && u.Role != role) {
+			continue
+		}
+		cp := *u
+		out = append(out, &cp)
 	}
 	return out
 }

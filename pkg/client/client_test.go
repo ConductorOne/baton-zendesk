@@ -399,9 +399,9 @@ func drainGetUserOrganizationMemberships(t *testing.T, c *ZendeskClient, userID 
 	}
 }
 
-// GetUserOrganizationMemberships backs the inverted org-grant emission in
-// teamMemberResourceType.Grants; it must page past the first 100 memberships or
-// members in many orgs would silently lose grants beyond page 1.
+// GetUserOrganizationMemberships must page past the first 100 memberships or a
+// user in many orgs would silently lose memberships beyond page 1. Guards the
+// hand-rolled CBP URL against the empty-query= regression (CXH-1907).
 func TestGetUserOrganizationMemberships_CBPPaginatesPastFirstPage(t *testing.T) {
 	srv := orgMembershipsCBPMock(t, 106, "9001")
 	defer srv.Close()

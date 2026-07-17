@@ -163,8 +163,9 @@ func (z *ZendeskClient) GetOrganizationUsers(ctx context.Context, orgID *v2.Reso
 
 // GetUserOrganizationMemberships returns all organization memberships for a user
 // using cursor-based pagination. Each membership carries the user_id/organization_id
-// pair used to emit organization grants from the team-member side (see
-// teamMemberResourceType.Grants).
+// pair. Retained (and covered by tests) for callers that need a user's explicit
+// memberships; org grants are emitted per-organization from org.Grants because
+// this per-user endpoint does not report the same agent/admin↔org associations.
 //
 // The URL is hand-rolled for the same reason as listUsersCBP: go-zendesk's option
 // encoder emits an empty query= param that silently disables CBP on this endpoint (CXH-1907).
