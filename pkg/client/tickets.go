@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -79,4 +80,40 @@ type Ticket struct {
 	Comment      *TicketComment `json:"comment,omitempty"`
 	CreatedAt    *time.Time     `json:"created_at,omitempty"`
 	UpdatedAt    *time.Time     `json:"updated_at,omitempty"`
+}
+
+// CreateTicket creates a Zendesk ticket.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#create-ticket
+func (z *ZendeskClient) CreateTicket(ctx context.Context, ticket Ticket) (Ticket, error) {
+	var data, result struct {
+		Ticket Ticket `json:"ticket"`
+	}
+	data.Ticket = ticket
+
+	body, err := z.client.Post(ctx, pathTickets, data)
+	if err != nil {
+		return Ticket{}, wrapZendeskError(err)
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return Ticket{}, fmt.Errorf("baton-zendesk: decode create ticket response: %w", err)
+	}
+	return result.Ticket, nil
+}
+
+// GetTicket fetches a single Zendesk ticket by ID.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#show-ticket
+func (z *ZendeskClient) GetTicket(ctx context.Context, ticketID int64) (Ticket, error) {
+	body, err := z.client.Get(ctx, fmt.Sprintf(pathTicketFmt, ticketID))
+	if err != nil {
+		return Ticket{}, wrapZendeskError(err)
+	}
+	var result struct {
+		Ticket Ticket `json:"ticket"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return Ticket{}, fmt.Errorf("baton-zendesk: decode ticket response: %w", err)
+	}
+	return result.Ticket, nil
 }

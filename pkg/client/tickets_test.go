@@ -1,8 +1,14 @@
 package client
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // TestCustomFieldDecode covers the go-zendesk gap that motivated local types:
@@ -47,6 +53,75 @@ func TestCustomFieldDecode(t *testing.T) {
 	}
 	if got := cfs[5].Value; got != 1.5 {
 		t.Fatalf("decimal value: expected 1.5, got %#v", got)
+	}
+}
+
+func ticketMockServer(t *testing.T) (*httptest.Server, *ZendeskClient) {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /tickets.json", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Ticket Ticket `json:"ticket"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		req.Ticket.ID = 35436
+		req.Ticket.Status = "new"
+		// Echo a numeric custom field back even if the request had none —
+		// simulates agent-set values on unrelated fields (spec R12).
+		req.Ticket.CustomFields = append(req.Ticket.CustomFields, CustomField{ID: 999, Value: float64(7)})
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": req.Ticket})
+	})
+	mux.HandleFunc("GET /tickets/35436.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ticket":{"id":35436,"subject":"subj","status":"solved",
+			"custom_fields":[{"id":999,"value":7}]}}`))
+	})
+	mux.HandleFunc("GET /tickets/404404.json", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"RecordNotFound"}`, http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return srv, newTestClient(t, srv.URL)
+}
+
+func TestCreateTicket(t *testing.T) {
+	_, zc := ticketMockServer(t)
+	got, err := zc.CreateTicket(context.Background(), Ticket{
+		Subject: "subj",
+		Comment: &TicketComment{Body: "desc"},
+	})
+	if err != nil {
+		t.Fatalf("CreateTicket: %v", err)
+	}
+	if got.ID != 35436 || got.Status != "new" {
+		t.Fatalf("expected id=35436 status=new, got %+v", got)
+	}
+}
+
+func TestGetTicket(t *testing.T) {
+	_, zc := ticketMockServer(t)
+	got, err := zc.GetTicket(context.Background(), 35436)
+	if err != nil {
+		t.Fatalf("GetTicket: %v", err)
+	}
+	if got.Status != "solved" {
+		t.Fatalf("expected status=solved, got %+v", got)
+	}
+}
+
+func TestGetTicketNotFound(t *testing.T) {
+	_, zc := ticketMockServer(t)
+	_, err := zc.GetTicket(context.Background(), 404404)
+	if err == nil {
+		t.Fatalf("expected error for missing ticket")
+	}
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("expected NotFound, got %v (%v)", status.Code(err), err)
 	}
 }
 
