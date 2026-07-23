@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/nukosuke/go-zendesk/zendesk"
 )
 
 // Ticket create/read paths use these local types instead of go-zendesk's: its
@@ -116,4 +118,44 @@ func (z *ZendeskClient) GetTicket(ctx context.Context, ticketID int64) (Ticket, 
 		return Ticket{}, fmt.Errorf("baton-zendesk: decode ticket response: %w", err)
 	}
 	return result.Ticket, nil
+}
+
+// maxTicketFormPages bounds the offset drain in ListAllTicketForms. Zendesk
+// caps accounts at 300 ticket forms (~3 pages at 100/page); tripping the cap
+// is an error, never a silent truncation.
+const maxTicketFormPages = 10
+
+// ListAllTicketForms fetches every ticket form, draining offset pagination.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_forms/#list-ticket-forms
+func (z *ZendeskClient) ListAllTicketForms(ctx context.Context) ([]zendesk.TicketForm, error) {
+	var all []zendesk.TicketForm
+	opts := &zendesk.TicketFormListOptions{
+		PageOptions: zendesk.PageOptions{Page: 1, PerPage: cbpPageSize},
+	}
+	for {
+		forms, page, err := z.client.GetTicketForms(ctx, opts)
+		if err != nil {
+			return nil, wrapZendeskError(err)
+		}
+		all = append(all, forms...)
+		if !page.HasNext() {
+			return all, nil
+		}
+		opts.Page++
+		if opts.Page > maxTicketFormPages {
+			return nil, fmt.Errorf("baton-zendesk: ticket forms exceeded %d pages, refusing to truncate", maxTicketFormPages)
+		}
+	}
+}
+
+// GetTicketForm fetches a single ticket form by ID.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_forms/#show-ticket-form
+func (z *ZendeskClient) GetTicketForm(ctx context.Context, formID int64) (zendesk.TicketForm, error) {
+	form, err := z.client.GetTicketForm(ctx, formID)
+	if err != nil {
+		return zendesk.TicketForm{}, wrapZendeskError(err)
+	}
+	return form, nil
 }

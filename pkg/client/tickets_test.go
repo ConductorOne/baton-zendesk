@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -135,5 +136,62 @@ func TestCustomFieldEncode(t *testing.T) {
 	want := `{"id":111,"value":["a","b"]}`
 	if string(b) != want {
 		t.Fatalf("expected %s, got %s", want, string(b))
+	}
+}
+
+// ticketFormsMock serves two OBP pages of ticket forms, then a page-cap probe
+// mode where next_page never goes empty.
+func ticketFormsMock(t *testing.T, endless bool) *ZendeskClient {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ticket_forms.json", func(w http.ResponseWriter, r *http.Request) {
+		page := r.URL.Query().Get("page")
+		w.Header().Set("Content-Type", "application/json")
+		next := `"next"`
+		if page == "2" && !endless {
+			next = "null"
+		}
+		id := int64(100)
+		if page == "2" {
+			id = 200
+		}
+		fmt.Fprintf(w, `{"ticket_forms":[{"id":%d,"name":"form-%d","active":true}],
+			"next_page":%s,"count":2}`, id, id, next)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return newTestClient(t, srv.URL)
+}
+
+func TestListAllTicketForms(t *testing.T) {
+	zc := ticketFormsMock(t, false)
+	forms, err := zc.ListAllTicketForms(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllTicketForms: %v", err)
+	}
+	if len(forms) != 2 || forms[0].ID != 100 || forms[1].ID != 200 {
+		t.Fatalf("expected forms [100 200], got %+v", forms)
+	}
+}
+
+func TestListAllTicketFormsPageCap(t *testing.T) {
+	zc := ticketFormsMock(t, true)
+	_, err := zc.ListAllTicketForms(context.Background())
+	if err == nil {
+		t.Fatalf("expected page-cap error, got nil")
+	}
+}
+
+func TestGetTicketFormNotFound(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ticket_forms/9.json", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"RecordNotFound"}`, http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	zc := newTestClient(t, srv.URL)
+	_, err := zc.GetTicketForm(context.Background(), 9)
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("expected NotFound, got %v", err)
 	}
 }
