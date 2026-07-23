@@ -447,3 +447,58 @@ func TestAgentTicketURL(t *testing.T) {
 		t.Fatalf("expected API url fallback, got %q", got)
 	}
 }
+
+func TestBulkCreateTickets(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	resp, err := c.BulkCreateTickets(context.Background(), &v2.TicketsServiceBulkCreateTicketsRequest{
+		TicketRequests: []*v2.TicketsServiceCreateTicketRequest{
+			{
+				Request: &v2.TicketRequest{DisplayName: "good", Description: "d"},
+				Schema:  testSchema(t),
+			},
+			{
+				// Empty subject+description fails buildCreatePayload per item.
+				Request: &v2.TicketRequest{},
+				Schema:  testSchema(t),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BulkCreateTickets: per-item failures must not fail the batch: %v", err)
+	}
+	items := resp.GetTickets()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].GetError() != "" || items[0].GetTicket().GetId() != "555" {
+		t.Fatalf("item 0: expected success, got %+v", items[0])
+	}
+	if items[1].GetError() == "" {
+		t.Fatalf("item 1: expected per-item error, got %+v", items[1])
+	}
+}
+
+func TestBulkGetTickets(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	resp, err := c.BulkGetTickets(context.Background(), &v2.TicketsServiceBulkGetTicketsRequest{
+		TicketRequests: []*v2.TicketsServiceGetTicketRequest{
+			{Id: "555"},
+			{Id: "not-numeric"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BulkGetTickets: per-item failures must not fail the batch: %v", err)
+	}
+	items := resp.GetTickets()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].GetError() != "" || items[0].GetTicket().GetId() != "555" {
+		t.Fatalf("item 0: expected success for 555, got %+v", items[0])
+	}
+	if items[1].GetError() == "" {
+		t.Fatalf("item 1: expected per-item error, got %+v", items[1])
+	}
+}

@@ -306,3 +306,46 @@ func (d *Connector) agentTicketURL(ticketID int64, apiURL string) string {
 	}
 	return fmt.Sprintf("https://%s.zendesk.com/agent/tickets/%d", d.subdomain, ticketID)
 }
+
+// BulkCreateTickets creates tickets one by one; per-item failures land in the
+// item's Error field so one bad ticket never fails the batch (spec R11).
+func (d *Connector) BulkCreateTickets(ctx context.Context, request *v2.TicketsServiceBulkCreateTicketsRequest) (*v2.TicketsServiceBulkCreateTicketsResponse, error) {
+	tickets := make([]*v2.TicketsServiceCreateTicketResponse, 0, len(request.GetTicketRequests()))
+	for _, ticketReq := range request.GetTicketRequests() {
+		reqBody := ticketReq.GetRequest()
+		ticketBody := &v2.Ticket{
+			DisplayName:  reqBody.GetDisplayName(),
+			Description:  reqBody.GetDescription(),
+			Status:       reqBody.GetStatus(),
+			Labels:       reqBody.GetLabels(),
+			CustomFields: reqBody.GetCustomFields(),
+			RequestedFor: reqBody.GetRequestedFor(),
+		}
+		ticket, annos, err := d.CreateTicket(ctx, ticketBody, ticketReq.GetSchema())
+		// Merge the request annotations so the external ticket ref round-trips.
+		annos.Merge(ticketReq.GetAnnotations()...)
+		resp := &v2.TicketsServiceCreateTicketResponse{Ticket: ticket, Annotations: annos}
+		if err != nil {
+			resp.Error = err.Error()
+		}
+		tickets = append(tickets, resp)
+	}
+	return &v2.TicketsServiceBulkCreateTicketsResponse{Tickets: tickets}, nil
+}
+
+// BulkGetTickets fetches tickets one by one with the same per-item error
+// semantics as BulkCreateTickets (spec R11).
+func (d *Connector) BulkGetTickets(ctx context.Context, request *v2.TicketsServiceBulkGetTicketsRequest) (*v2.TicketsServiceBulkGetTicketsResponse, error) {
+	tickets := make([]*v2.TicketsServiceGetTicketResponse, 0, len(request.GetTicketRequests()))
+	for _, ticketReq := range request.GetTicketRequests() {
+		ticket, annos, err := d.GetTicket(ctx, ticketReq.GetId())
+		// Merge the request annotations so the external ticket ref round-trips.
+		annos.Merge(ticketReq.GetAnnotations()...)
+		resp := &v2.TicketsServiceGetTicketResponse{Ticket: ticket, Annotations: annos}
+		if err != nil {
+			resp.Error = err.Error()
+		}
+		tickets = append(tickets, resp)
+	}
+	return &v2.TicketsServiceBulkGetTicketsResponse{Tickets: tickets}, nil
+}
