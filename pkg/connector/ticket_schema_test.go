@@ -11,31 +11,35 @@ import (
 func TestSchemaFieldForTicketField(t *testing.T) {
 	ctx := context.Background()
 	tests := []struct {
-		name        string
-		field       zendesk.TicketField
-		wantOK      bool
-		wantPick    []string
-		wantMulti   []string
+		name         string
+		field        zendesk.TicketField
+		wantOK       bool
+		wantRequired bool
+		wantPick     []string
+		wantMulti    []string
 	}{
-		{name: "text", field: zendesk.TicketField{ID: 1, Type: "text", Title: "T", Active: true, Removable: true}, wantOK: true},
-		{name: "textarea", field: zendesk.TicketField{ID: 2, Type: "textarea", Title: "T", Active: true, Removable: true}, wantOK: true},
-		{name: "regexp", field: zendesk.TicketField{ID: 3, Type: "regexp", Title: "T", Active: true, Removable: true}, wantOK: true},
-		{name: "partialcreditcard", field: zendesk.TicketField{ID: 4, Type: "partialcreditcard", Title: "T", Active: true, Removable: true}, wantOK: true},
-		{name: "lookup", field: zendesk.TicketField{ID: 5, Type: "lookup", Title: "T", Active: true, Removable: true}, wantOK: true},
+		{name: "text", field: zendesk.TicketField{ID: 1, Type: "text", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
+		{name: "required text", field: zendesk.TicketField{ID: 13, Type: "text", Title: "T", Active: true, Removable: true, Required: true}, wantOK: true, wantRequired: true},
+		{name: "textarea", field: zendesk.TicketField{ID: 2, Type: "textarea", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
+		{name: "regexp", field: zendesk.TicketField{ID: 3, Type: "regexp", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
+		{name: "partialcreditcard", field: zendesk.TicketField{ID: 4, Type: "partialcreditcard", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
+		{name: "lookup", field: zendesk.TicketField{ID: 5, Type: "lookup", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
 		{
-			name: "tagger",
-			field: zendesk.TicketField{ID: 6, Type: "tagger", Title: "T", Active: true, Removable: true,
-				CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Opt A", Value: "opt_a"}, {Name: "Opt B", Value: "opt_b"}}},
-			wantOK: true, wantPick: []string{"opt_a", "opt_b"},
+			name:         "tagger",
+			field:        zendesk.TicketField{ID: 6, Type: "tagger", Title: "T", Active: true, Removable: true, CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Opt A", Value: "opt_a"}, {Name: "Opt B", Value: "opt_b"}}},
+			wantOK:       true,
+			wantRequired: false,
+			wantPick:     []string{"opt_a", "opt_b"},
 		},
 		{
-			name: "multiselect",
-			field: zendesk.TicketField{ID: 7, Type: "multiselect", Title: "T", Active: true, Removable: true,
-				CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Opt A", Value: "opt_a"}}},
-			wantOK: true, wantMulti: []string{"opt_a"},
+			name:         "multiselect",
+			field:        zendesk.TicketField{ID: 7, Type: "multiselect", Title: "T", Active: true, Removable: true, CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Opt A", Value: "opt_a"}}},
+			wantOK:       true,
+			wantRequired: false,
+			wantMulti:    []string{"opt_a"},
 		},
-		{name: "checkbox", field: zendesk.TicketField{ID: 8, Type: "checkbox", Title: "T", Active: true, Removable: true}, wantOK: true},
-		{name: "date", field: zendesk.TicketField{ID: 9, Type: "date", Title: "T", Active: true, Removable: true}, wantOK: true},
+		{name: "checkbox", field: zendesk.TicketField{ID: 8, Type: "checkbox", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
+		{name: "date", field: zendesk.TicketField{ID: 9, Type: "date", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
 		{name: "integer skipped", field: zendesk.TicketField{ID: 10, Type: "integer", Title: "T", Active: true, Removable: true}, wantOK: false},
 		{name: "decimal skipped", field: zendesk.TicketField{ID: 11, Type: "decimal", Title: "T", Active: true, Removable: true}, wantOK: false},
 		{name: "unknown skipped", field: zendesk.TicketField{ID: 12, Type: "surprise", Title: "T", Active: true, Removable: true}, wantOK: false},
@@ -51,6 +55,9 @@ func TestSchemaFieldForTicketField(t *testing.T) {
 			}
 			if cf.GetId() == "" || cf.GetDisplayName() != "T" {
 				t.Fatalf("expected id set and display name T, got %+v", cf)
+			}
+			if cf.GetRequired() != tc.wantRequired {
+				t.Fatalf("required: expected %v, got %v", tc.wantRequired, cf.GetRequired())
 			}
 			if tc.wantPick != nil {
 				vals := cf.GetPickStringValue().GetAllowedValues()
@@ -117,12 +124,33 @@ func TestSchemaForForm(t *testing.T) {
 			t.Fatalf("type %d: expected %s, got %s", i, want, types[i].GetId())
 		}
 	}
-	prio := cfs[syntheticFieldPriority].GetPickStringValue().GetAllowedValues()
-	if len(prio) != 4 || prio[0] != "low" || prio[3] != "urgent" {
-		t.Fatalf("priority allowed values: expected [low normal high urgent], got %v", prio)
+	prioField := cfs[syntheticFieldPriority]
+	if prioField.GetRequired() != false {
+		t.Fatalf("priority field required: expected false, got %v", prioField.GetRequired())
 	}
-	tt := cfs[syntheticFieldType].GetPickStringValue().GetAllowedValues()
-	if len(tt) != 4 || tt[0] != "problem" || tt[3] != "task" {
-		t.Fatalf("type allowed values: expected [problem incident question task], got %v", tt)
+	prio := prioField.GetPickStringValue().GetAllowedValues()
+	wantPrio := []string{"low", "normal", "high", "urgent"}
+	if len(prio) != len(wantPrio) {
+		t.Fatalf("priority allowed values length: expected %d, got %d: %v", len(wantPrio), len(prio), prio)
+	}
+	for i, want := range wantPrio {
+		if prio[i] != want {
+			t.Fatalf("priority value %d: expected %s, got %s", i, want, prio[i])
+		}
+	}
+
+	typeField := cfs[syntheticFieldType]
+	if typeField.GetRequired() != false {
+		t.Fatalf("type field required: expected false, got %v", typeField.GetRequired())
+	}
+	tt := typeField.GetPickStringValue().GetAllowedValues()
+	wantTypeValues := []string{"problem", "incident", "question", "task"}
+	if len(tt) != len(wantTypeValues) {
+		t.Fatalf("type allowed values length: expected %d, got %d: %v", len(wantTypeValues), len(tt), tt)
+	}
+	for i, want := range wantTypeValues {
+		if tt[i] != want {
+			t.Fatalf("type value %d: expected %s, got %s", i, want, tt[i])
+		}
 	}
 }
