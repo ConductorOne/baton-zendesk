@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+// Ticket create/read paths use these local types instead of go-zendesk's: its
+// CustomField.UnmarshalJSON rejects JSON numbers, so any ticket carrying a
+// numeric custom-field value — including agent-set values on fields this
+// connector never touches — fails to decode through the vendored typed methods.
 // https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#create-ticket
 const (
 	pathTickets = "/tickets.json"
@@ -35,7 +39,7 @@ func (c *CustomField) UnmarshalJSON(data []byte) error {
 		Value any   `json:"value"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return fmt.Errorf("baton-zendesk: decode custom field: %w", err)
 	}
 	c.ID = raw.ID
 	switch v := raw.Value.(type) {
