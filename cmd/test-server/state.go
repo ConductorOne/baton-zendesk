@@ -331,12 +331,17 @@ func (s *State) CreateTicket(t *Ticket) *Ticket {
 		t.Status = "new"
 	}
 	s.tickets[t.ID] = t
-	return t
+	cp := *t
+	return &cp
 }
 
 func (s *State) GetTicket(id int64) (*Ticket, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	t, ok := s.tickets[id]
-	return t, ok
+	if !ok {
+		return nil, false
+	}
+	cp := *t
+	return &cp, true
 }
