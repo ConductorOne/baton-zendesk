@@ -195,3 +195,60 @@ func TestGetTicketFormNotFound(t *testing.T) {
 		t.Fatalf("expected NotFound, got %v", err)
 	}
 }
+
+func ticketFieldsMock(t *testing.T, total int) *ZendeskClient {
+	t.Helper()
+	fields := make([]map[string]any, total)
+	for i := range fields {
+		fields[i] = map[string]any{"id": int64(1000 + i), "type": "text", "title": fmt.Sprintf("f%d", i), "active": true, "removable": true}
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /ticket_fields.json", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("page[size]") == "" {
+			http.Error(w, "missing page[size]", http.StatusBadRequest)
+			return
+		}
+		start := 0
+		if after := q.Get("page[after]"); after != "" {
+			_, _ = fmt.Sscanf(after, "p%d", &start)
+		}
+		end := start + 100
+		hasMore := true
+		if end >= len(fields) {
+			end = len(fields)
+			hasMore = false
+		}
+		cursor := ""
+		if hasMore {
+			cursor = fmt.Sprintf("p%d", end)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ticket_fields": fields[start:end],
+			"meta":          map[string]any{"has_more": hasMore, "after_cursor": cursor},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return newTestClient(t, srv.URL)
+}
+
+func TestListAllTicketFields(t *testing.T) {
+	zc := ticketFieldsMock(t, 150)
+	fields, err := zc.ListAllTicketFields(context.Background())
+	if err != nil {
+		t.Fatalf("ListAllTicketFields: %v", err)
+	}
+	if len(fields) != 150 {
+		t.Fatalf("expected 150 fields, got %d", len(fields))
+	}
+}
+
+func TestListAllTicketFieldsPageCap(t *testing.T) {
+	zc := ticketFieldsMock(t, 5100) // 51 pages exceeds the 50-page cap.
+	_, err := zc.ListAllTicketFields(context.Background())
+	if err == nil {
+		t.Fatalf("expected page-cap error, got nil")
+	}
+}

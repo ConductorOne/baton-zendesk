@@ -159,3 +159,33 @@ func (z *ZendeskClient) GetTicketForm(ctx context.Context, formID int64) (zendes
 	}
 	return form, nil
 }
+
+// maxTicketFieldPages bounds the cursor drain in ListAllTicketFields.
+// (50 pages × 100 = 5,000 fields); tripping the cap is an error, never a
+// silent truncation.
+const maxTicketFieldPages = 50
+
+// ListAllTicketFields fetches every ticket field, draining cursor pagination
+// via the same typed-CBP pattern ListGroups and ListOrganizations use.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_fields/#list-ticket-fields
+func (z *ZendeskClient) ListAllTicketFields(ctx context.Context) ([]zendesk.TicketField, error) {
+	var all []zendesk.TicketField
+	token := ""
+	for page := 0; ; page++ {
+		if page >= maxTicketFieldPages {
+			return nil, fmt.Errorf("baton-zendesk: ticket fields exceeded %d pages, refusing to truncate", maxTicketFieldPages)
+		}
+		fields, meta, err := z.client.GetTicketFieldsCBP(ctx, &zendesk.CBPOptions{
+			CursorPagination: zendesk.CursorPagination{PageSize: cbpPageSize, PageAfter: token},
+		})
+		if err != nil {
+			return nil, wrapZendeskError(err)
+		}
+		all = append(all, fields...)
+		token = getNextPageToken(meta)
+		if token == "" {
+			return all, nil
+		}
+	}
+}
