@@ -25,8 +25,14 @@ func TestSchemaFieldForTicketField(t *testing.T) {
 		{name: "partialcreditcard", field: zendesk.TicketField{ID: 4, Type: "partialcreditcard", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
 		{name: "lookup", field: zendesk.TicketField{ID: 5, Type: "lookup", Title: "T", Active: true, Removable: true}, wantOK: true, wantRequired: false},
 		{
-			name:         "tagger",
-			field:        zendesk.TicketField{ID: 6, Type: "tagger", Title: "T", Active: true, Removable: true, CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Opt A", Value: "opt_a"}, {Name: "Opt B", Value: "opt_b"}}},
+			name: "tagger",
+			field: zendesk.TicketField{
+				ID: 6, Type: "tagger", Title: "T", Active: true, Removable: true,
+				CustomFieldOptions: []zendesk.CustomFieldOption{
+					{Name: "Opt A", Value: "opt_a"},
+					{Name: "Opt B", Value: "opt_b"},
+				},
+			},
 			wantOK:       true,
 			wantRequired: false,
 			wantPick:     []string{"opt_a", "opt_b"},

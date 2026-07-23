@@ -118,7 +118,7 @@ func ticketFieldsByID(fields []zendesk.TicketField) map[int64]zendesk.TicketFiel
 func (d *Connector) CreateTicket(ctx context.Context, ticket *v2.Ticket, schema *v2.TicketSchema) (*v2.Ticket, annotations.Annotations, error) {
 	valid, err := sdkTicket.ValidateTicket(ctx, schema, ticket)
 	if err != nil {
-		return nil, nil, fmt.Errorf("baton-zendesk: ticket validation failed: %w", err)
+		return nil, nil, errors.Join(fmt.Errorf("baton-zendesk: ticket validation failed: %w", err), sdkTicket.ErrTicketValidationError)
 	}
 	if !valid {
 		return nil, nil, errors.Join(errors.New("baton-zendesk: ticket is invalid for schema"), sdkTicket.ErrTicketValidationError)
