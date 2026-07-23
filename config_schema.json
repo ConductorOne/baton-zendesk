@@ -131,6 +131,12 @@
       "displayName": "Organizations",
       "description": "Limit syncing to specific organizations",
       "stringSliceField": {}
+    },
+    {
+      "name": "ticketing",
+      "displayName": "Enable external ticket provisioning",
+      "description": "This must be set to enable ticketing support",
+      "boolField": {}
     }
   ],
   "displayName": "Zendesk",
