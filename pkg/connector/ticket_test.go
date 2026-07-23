@@ -2,13 +2,19 @@ package connector
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
+	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
+	sdkTicket "github.com/conductorone/baton-sdk/pkg/types/ticket"
 	"github.com/conductorone/baton-zendesk/pkg/client"
+	"github.com/nukosuke/go-zendesk/zendesk"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -198,5 +204,241 @@ func TestGetTicketSchema(t *testing.T) {
 	_, _, err = c.GetTicketSchema(context.Background(), "not-a-number")
 	if status.Code(err) != codes.InvalidArgument {
 		t.Fatalf("bad id: expected InvalidArgument, got %v", err)
+	}
+}
+
+func createTicketFixtureConnector(t *testing.T, capture *client.Ticket) *Connector {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /tickets.json", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Ticket client.Ticket `json:"ticket"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		*capture = req.Ticket
+		req.Ticket.ID = 555
+		req.Ticket.Status = "new"
+		req.Ticket.URL = "http://api/tickets/555.json"
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"ticket": req.Ticket})
+	})
+	mux.HandleFunc("GET /tickets/555.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ticket":{"id":555,"subject":"Access to prod DB","status":"solved",
+			"url":"http://api/tickets/555.json",
+			"created_at":"2026-07-01T10:00:00Z","updated_at":"2026-07-02T11:30:00Z"}}`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	zc, err := client.New(context.Background(), nil, "", "test@example.com", "token", srv.URL)
+	if err != nil {
+		t.Fatalf("client.New: %v", err)
+	}
+	return &Connector{zendeskClient: zc}
+}
+
+func testSchema(t *testing.T) *v2.TicketSchema {
+	t.Helper()
+	fieldsByID := map[int64]zendesk.TicketField{
+		1: {ID: 1, Type: "tagger", Title: "Env", Active: true, Removable: true,
+			CustomFieldOptions: []zendesk.CustomFieldOption{{Name: "Prod", Value: "prod"}}},
+		2: {ID: 2, Type: "checkbox", Title: "Urgent", Active: true, Removable: true},
+		3: {ID: 3, Type: "date", Title: "Due", Active: true, Removable: true},
+	}
+	form := zendesk.TicketForm{ID: 77, Name: "HW Request", Active: true, TicketFieldIDs: []int64{1, 2, 3}}
+	return schemaForForm(context.Background(), form, fieldsByID)
+}
+
+func TestCreateTicketMapping(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	schema := testSchema(t)
+
+	due := time.Date(2026, 8, 1, 23, 30, 0, 0, time.FixedZone("UTC+9", 9*3600))
+	ticket := &v2.Ticket{
+		DisplayName: "Access to prod DB",
+		Description: "please grant",
+		Labels:      []string{"c1", "access-request"},
+		RequestedFor: &v2.Resource{
+			Id: &v2.ResourceId{ResourceType: "team_member", Resource: "101"},
+		},
+		Status: &v2.TicketStatus{Id: "open"},
+		CustomFields: map[string]*v2.TicketCustomField{
+			"1":                    sdkTicket.PickStringField("1", "prod"),
+			"2":                    sdkTicket.BoolField("2", true),
+			"3":                    sdkTicket.TimestampField("3", due),
+			syntheticFieldPriority: sdkTicket.PickStringField(syntheticFieldPriority, "high"),
+			syntheticFieldType:     sdkTicket.PickStringField(syntheticFieldType, "task"),
+		},
+	}
+
+	created, _, err := c.CreateTicket(context.Background(), ticket, schema)
+	if err != nil {
+		t.Fatalf("CreateTicket: %v", err)
+	}
+	if created.GetId() != "555" {
+		t.Fatalf("expected created id 555, got %q", created.GetId())
+	}
+
+	// Payload assertions (spec R7/R8).
+	if captured.Subject != "Access to prod DB" || captured.Comment == nil || captured.Comment.Body != "please grant" {
+		t.Fatalf("subject/comment: got %+v", captured)
+	}
+	if captured.TicketFormID != 77 || captured.RequesterID != 101 || captured.Status != "open" {
+		t.Fatalf("form/requester/status: got %+v", captured)
+	}
+	if captured.Priority != "high" || captured.Type != "task" {
+		t.Fatalf("synthetic fields: expected priority=high type=task, got %+v", captured)
+	}
+	if len(captured.Tags) != 2 {
+		t.Fatalf("tags: got %+v", captured.Tags)
+	}
+	if len(captured.CustomFields) != 3 {
+		t.Fatalf("expected 3 custom fields (priority/type extracted), got %+v", captured.CustomFields)
+	}
+	values := map[int64]any{}
+	for _, cf := range captured.CustomFields {
+		values[cf.ID] = cf.Value
+	}
+	if values[1] != "prod" || values[2] != true {
+		t.Fatalf("custom field values: got %+v", values)
+	}
+	// Date formatted in UTC: 23:30 UTC+9 is 14:30 UTC on the same day.
+	if values[3] != "2026-08-01" {
+		t.Fatalf("date value: expected 2026-08-01, got %v", values[3])
+	}
+}
+
+func TestCreateTicketRejectsSolvedClosed(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	for _, badStatus := range []string{"solved", "closed"} {
+		ticket := &v2.Ticket{
+			DisplayName: "t", Description: "d",
+			Status: &v2.TicketStatus{Id: badStatus},
+		}
+		_, _, err := c.CreateTicket(context.Background(), ticket, testSchema(t))
+		if status.Code(err) != codes.InvalidArgument {
+			t.Fatalf("status %s: expected InvalidArgument, got %v", badStatus, err)
+		}
+	}
+}
+
+func TestCreateTicketValidationFailure(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	schema := testSchema(t)
+	// Pick value outside allowedValues: ValidateTicket returns (false, nil).
+	ticket := &v2.Ticket{
+		DisplayName: "t", Description: "d",
+		CustomFields: map[string]*v2.TicketCustomField{
+			"1": sdkTicket.PickStringField("1", "not-an-option"),
+		},
+	}
+	_, _, err := c.CreateTicket(context.Background(), ticket, schema)
+	if err == nil || !errors.Is(err, sdkTicket.ErrTicketValidationError) {
+		t.Fatalf("expected ErrTicketValidationError, got %v", err)
+	}
+}
+
+func TestCreateTicketRequesterParseFailure(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	ticket := &v2.Ticket{
+		DisplayName: "t", Description: "d",
+		RequestedFor: &v2.Resource{Id: &v2.ResourceId{ResourceType: "team_member", Resource: "not-numeric"}},
+	}
+	_, _, err := c.CreateTicket(context.Background(), ticket, testSchema(t))
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", err)
+	}
+}
+
+func TestCreateTicketEmptySubjectAndDescription(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	_, _, err := c.CreateTicket(context.Background(), &v2.Ticket{}, testSchema(t))
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument for empty subject+description, got %v", err)
+	}
+}
+
+func TestGetTicketCompletion(t *testing.T) {
+	var captured client.Ticket
+	c := createTicketFixtureConnector(t, &captured)
+	got, _, err := c.GetTicket(context.Background(), "555")
+	if err != nil {
+		t.Fatalf("GetTicket: %v", err)
+	}
+	if got.GetStatus().GetId() != "solved" {
+		t.Fatalf("expected solved, got %+v", got.GetStatus())
+	}
+	if got.GetCompletedAt() == nil {
+		t.Fatalf("expected CompletedAt set for solved ticket")
+	}
+	if got.GetCompletedAt().AsTime() != got.GetUpdatedAt().AsTime() {
+		t.Fatalf("CompletedAt should equal UpdatedAt")
+	}
+	// subdomain empty (base-url test mode): URL falls back to the API url.
+	if got.GetUrl() != "http://api/tickets/555.json" {
+		t.Fatalf("expected API url fallback, got %q", got.GetUrl())
+	}
+
+	_, _, err = c.GetTicket(context.Background(), "not-numeric")
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument for bad id, got %v", err)
+	}
+}
+
+// TestCustomFieldWireValue covers every row of the spec R8 mapping table,
+// including omission of empty/unset values.
+func TestCustomFieldWireValue(t *testing.T) {
+	due := time.Date(2026, 8, 1, 23, 30, 0, 0, time.FixedZone("UTC+9", 9*3600))
+	tests := []struct {
+		name    string
+		field   *v2.TicketCustomField
+		want    any
+		wantOK  bool
+		wantErr bool
+	}{
+		{name: "string", field: sdkTicket.StringField("1", "hello"), want: "hello", wantOK: true},
+		{name: "empty string omitted", field: sdkTicket.StringField("1", ""), wantOK: false},
+		{name: "pick string", field: sdkTicket.PickStringField("1", "prod"), want: "prod", wantOK: true},
+		{name: "pick multiple", field: sdkTicket.PickMultipleStringsField("1", []string{"a", "b"}), wantOK: true},
+		{name: "strings", field: sdkTicket.StringsField("1", []string{"x"}), wantOK: true},
+		{name: "bool", field: sdkTicket.BoolField("1", false), want: false, wantOK: true},
+		{name: "number", field: sdkTicket.NumberField("1", 42), want: float64(42), wantOK: true},
+		{name: "timestamp utc date", field: sdkTicket.TimestampField("1", due), want: "2026-08-01", wantOK: true},
+		{name: "unset value omitted", field: &v2.TicketCustomField{Id: "1"}, wantOK: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok, err := customFieldWireValue(tc.field)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err: expected wantErr=%v, got %v", tc.wantErr, err)
+			}
+			if ok != tc.wantOK {
+				t.Fatalf("ok: expected %v, got %v (value %#v)", tc.wantOK, ok, got)
+			}
+			if tc.want != nil && got != tc.want {
+				t.Fatalf("value: expected %#v, got %#v", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestAgentTicketURL(t *testing.T) {
+	c := &Connector{subdomain: "acme"}
+	if got := c.agentTicketURL(555, "http://api/x.json"); got != "https://acme.zendesk.com/agent/tickets/555" {
+		t.Fatalf("expected agent URL, got %q", got)
+	}
+	c = &Connector{}
+	if got := c.agentTicketURL(555, "http://api/x.json"); got != "http://api/x.json" {
+		t.Fatalf("expected API url fallback, got %q", got)
 	}
 }
