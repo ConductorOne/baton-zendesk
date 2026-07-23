@@ -9,6 +9,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	sdkTicket "github.com/conductorone/baton-sdk/pkg/types/ticket"
 	"github.com/conductorone/baton-zendesk/pkg/client"
@@ -19,6 +20,9 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Compile-time check: ticketing capability requires all six methods.
+var _ connectorbuilder.TicketManagerLimited = (*Connector)(nil)
 
 // isTicketFormsPlanGate classifies a forms-fetch failure as the plan-gate
 // signal (endpoint absent on plans without ticket forms). Classification is on

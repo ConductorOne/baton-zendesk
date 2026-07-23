@@ -11,6 +11,8 @@ import (
 	"time"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
+	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	sdkTicket "github.com/conductorone/baton-sdk/pkg/types/ticket"
 	"github.com/conductorone/baton-zendesk/pkg/client"
@@ -500,5 +502,41 @@ func TestBulkGetTickets(t *testing.T) {
 	}
 	if items[1].GetError() == "" {
 		t.Fatalf("item 1: expected per-item error, got %+v", items[1])
+	}
+}
+
+// TestTicketingEnabledToggle asserts spec R1: implementing the interface
+// always advertises ticketing; the WithTicketingEnabled opt only flips
+// ExternalTicketSettings.Enabled — which is what C1 reads for routing.
+func TestTicketingEnabledToggle(t *testing.T) {
+	fixture := ticketTestFixture{formsJSON: `{"ticket_forms":[],"next_page":null,"count":0}`, fieldsJSON: testFieldsJSON}
+	for _, tc := range []struct {
+		name string
+		opts []connectorbuilder.Opt
+		want bool
+	}{
+		{name: "enabled", opts: []connectorbuilder.Opt{connectorbuilder.WithTicketingEnabled()}, want: true},
+		{name: "disabled", opts: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			srv, err := connectorbuilder.NewConnector(ctx, newTicketTestConnector(t, fixture), tc.opts...)
+			if err != nil {
+				t.Fatalf("NewConnector: %v", err)
+			}
+			resp, err := srv.GetMetadata(ctx, &v2.ConnectorServiceGetMetadataRequest{})
+			if err != nil {
+				t.Fatalf("GetMetadata: %v", err)
+			}
+			settings := &v2.ExternalTicketSettings{}
+			annos := annotations.Annotations(resp.GetMetadata().GetAnnotations())
+			ok, err := annos.Pick(settings)
+			if err != nil || !ok {
+				t.Fatalf("expected ExternalTicketSettings annotation (ok=%v err=%v)", ok, err)
+			}
+			if settings.GetEnabled() != tc.want {
+				t.Fatalf("expected Enabled=%v, got %v", tc.want, settings.GetEnabled())
+			}
+		})
 	}
 }

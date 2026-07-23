@@ -36,6 +36,10 @@ var (
 		field.WithHidden(true),
 		field.WithExportTarget(field.ExportTargetCLIOnly),
 	)
+	// TicketingGUIField re-exports the SDK's shared --ticketing flag so the
+	// ConductorOne GUI shows the toggle (same pattern as baton-jira and
+	// baton-freshservice).
+	TicketingGUIField = field.TicketingField.ExportAs(field.ExportTargetGUI)
 
 	ConfigurationFields = []field.SchemaField{
 		SubdomainField,
@@ -43,6 +47,7 @@ var (
 		EmailField,
 		OrgsField,
 		BaseURLField,
+		TicketingGUIField,
 	}
 )
 
