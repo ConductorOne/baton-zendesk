@@ -65,6 +65,15 @@ func (d *Connector) ListTicketSchemas(ctx context.Context, _ *pagination.Token) 
 // GetTicketSchema rebuilds one schema: the default schema by its sentinel ID,
 // or a single active form by numeric ID (spec R10).
 func (d *Connector) GetTicketSchema(ctx context.Context, schemaID string) (*v2.TicketSchema, annotations.Annotations, error) {
+	var formID int64
+	if schemaID != defaultSchemaID {
+		var err error
+		formID, err = strconv.ParseInt(schemaID, 10, 64)
+		if err != nil {
+			return nil, nil, status.Errorf(codes.InvalidArgument, "baton-zendesk: invalid ticket schema id %q", schemaID)
+		}
+	}
+
 	fields, err := d.zendeskClient.ListAllTicketFields(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("baton-zendesk: failed to list ticket fields: %w", err)
@@ -74,10 +83,6 @@ func (d *Connector) GetTicketSchema(ctx context.Context, schemaID string) (*v2.T
 		return defaultTicketSchema(ctx, fields), nil, nil
 	}
 
-	formID, err := strconv.ParseInt(schemaID, 10, 64)
-	if err != nil {
-		return nil, nil, status.Errorf(codes.InvalidArgument, "baton-zendesk: invalid ticket schema id %q", schemaID)
-	}
 	form, err := d.zendeskClient.GetTicketForm(ctx, formID)
 	if err != nil {
 		if isNotFoundError(err) {
