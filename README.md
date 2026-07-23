@@ -19,6 +19,7 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
   - manage organizations
   - grant resources
   - revoke resources
+  - read/write tickets (required for ticketing feature)
 4. **Permissions for Provisioning Actions**: To use account provisioning features (create, delete, enable, disable users), the API token must belong to an account with one of the following permissions:
   - **Admin** role, OR
   - **Agent** role with permission to edit end-user profiles
@@ -96,3 +97,24 @@ Flags:
 
 Use "baton-zendesk [command] --help" for more information about a command.
 ```
+
+## Ticketing
+
+baton-zendesk can create and track Zendesk tickets for ConductorOne access-request
+fulfillment (external ticket provisioning). Enable it with `--ticketing`.
+
+- **Schemas:** one ticket schema per active Zendesk ticket form, containing that form's
+  active custom fields plus `priority` and `type` pick fields. On accounts without ticket
+  forms (forms require Suite Growth+ / Support Enterprise or the Productivity Pack
+  add-on), a single "Default" schema with all active custom fields is served instead.
+- **Completion:** a ticket is considered done when its status is `solved` or `closed`
+  (`completed_at` approximates via the ticket's `updated_at`).
+- **Token scopes:** the API token must be able to read ticket fields and ticket forms and
+  create/read tickets.
+- **v1 limitations:** integer/decimal custom fields are not exposed as schema fields;
+  Zendesk custom ticket statuses are not supported (system statuses only); ticket creation
+  does not yet send an `Idempotency-Key` header.
+
+> **Release note:** before releasing ticketing, verify the ticket-forms endpoint's
+> behavior on a live non-forms-plan trial account; if the plan-gate signal is not
+> HTTP 404, update `isTicketFormsPlanGate` accordingly (see spec R4).
