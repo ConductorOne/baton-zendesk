@@ -409,11 +409,16 @@ func TestCustomFieldWireValue(t *testing.T) {
 		{name: "string", field: sdkTicket.StringField("1", "hello"), want: "hello", wantOK: true},
 		{name: "empty string omitted", field: sdkTicket.StringField("1", ""), wantOK: false},
 		{name: "pick string", field: sdkTicket.PickStringField("1", "prod"), want: "prod", wantOK: true},
+		{name: "pick string empty omitted", field: sdkTicket.PickStringField("1", ""), wantOK: false},
 		{name: "pick multiple", field: sdkTicket.PickMultipleStringsField("1", []string{"a", "b"}), wantOK: true},
+		{name: "pick multiple nil omitted", field: sdkTicket.PickMultipleStringsField("1", nil), wantOK: false},
 		{name: "strings", field: sdkTicket.StringsField("1", []string{"x"}), wantOK: true},
+		{name: "strings nil omitted", field: sdkTicket.StringsField("1", nil), wantOK: false},
 		{name: "bool", field: sdkTicket.BoolField("1", false), want: false, wantOK: true},
 		{name: "number", field: sdkTicket.NumberField("1", 42), want: float64(42), wantOK: true},
 		{name: "timestamp utc date", field: sdkTicket.TimestampField("1", due), want: "2026-08-01", wantOK: true},
+		{name: "timestamp crosses day boundary in utc", field: sdkTicket.TimestampField("1", time.Date(2026, 8, 1, 0, 30, 0, 0, time.FixedZone("UTC+9", 9*3600))), want: "2026-07-31", wantOK: true},
+		{name: "timestamp zero omitted", field: sdkTicket.TimestampField("1", time.Time{}), wantOK: false},
 		{name: "unset value omitted", field: &v2.TicketCustomField{Id: "1"}, wantOK: false},
 	}
 	for _, tc := range tests {

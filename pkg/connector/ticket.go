@@ -261,12 +261,8 @@ func customFieldWireValue(cf *v2.TicketCustomField) (any, bool, error) {
 		return float64(v), err == nil, nil
 	case *v2.TicketCustomField_TimestampValue:
 		v, err := sdkTicket.GetTimestampValue(cf)
-		if err != nil || v.IsZero() {
-			return nil, false, nil
-		}
-		// date is Zendesk's only temporal custom-field type; format in UTC so
-		// the date is deterministic.
-		return v.UTC().Format("2006-01-02"), true, nil
+		// date is Zendesk's only temporal custom-field type; format in UTC so the date is deterministic.
+		return v.UTC().Format("2006-01-02"), err == nil && !v.IsZero(), nil
 	case nil:
 		return nil, false, nil
 	default:
