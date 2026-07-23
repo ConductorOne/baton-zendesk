@@ -213,7 +213,7 @@ Verified context (2026-07-23):
     — implemented as **raw calls** (`z.client.Post` / `z.client.Get`, the established
     pattern in this client) against `POST /api/v2/tickets.json` / `GET
     /api/v2/tickets/{id}.json`, decoding into **local types** in `pkg/client`:
-    a `Ticket` struct plus a `CustomFieldValue` that decodes string, bool, JSON number,
+    a `Ticket` struct plus a `CustomField` (ID + value) whose decoder accepts string, bool, JSON number,
     `[]string`, and null. Rationale: go-zendesk's `CustomField.UnmarshalJSON` rejects JSON
     numbers, so its typed ticket methods hard-fail on any ticket carrying a numeric
     custom-field value — including agent-set values on fields the connector never touches.
@@ -237,8 +237,10 @@ Verified context (2026-07-23):
   `GET /api/v2/ticket_forms.json`, with seed data (≥2 forms; ≥1 field of each mapped type
   plus one integer field to exercise the skip and the numeric read path) and stateful
   ticket creation.
-  *Accept:* an automated integration test (in `pkg/connector`) spins up the test-server
-  handlers via `httptest`, constructs the `Connector` against it, and drives
+  *Accept:* an automated integration test (in `cmd/test-server`, alongside the unexported
+  handler/state types it drives — it imports the real `pkg/connector` + `pkg/client`
+  stack) spins up the test-server handlers via `httptest`, constructs the `Connector`
+  against them, and drives
   ListTicketSchemas → CreateTicket → GetTicket end-to-end under `go test ./...`. The
   manual `--ticketing --list-ticket-schemas` / `--create-ticket` CLI flow against the
   standalone test server is documented in the test-server README as a secondary check.
@@ -289,7 +291,7 @@ Verified context (2026-07-23):
   `GET /api/v2/ticket_forms` + `GET /api/v2/ticket_forms/{id}` (go-zendesk types).
 - **New files:** `pkg/connector/ticket.go` (six interface methods + mapping),
   `pkg/connector/ticket_schema.go` (schema/field mapping helpers, keeps files small per
-  lint), `pkg/client/tickets.go` (raw ticket calls + local `Ticket`/`CustomFieldValue`
+  lint), `pkg/client/tickets.go` (raw ticket calls + local `Ticket`/`CustomField`
   types), `cmd/test-server/handlers_tickets.go`, plus tests
   (`pkg/connector/ticket_test.go`, client test additions).
 - **Zendesk field-required semantics:** `required` = required-to-solve (agent),
@@ -303,7 +305,7 @@ Verified context (2026-07-23):
   `errors.As`, not gRPC codes. Behavior on non-forms plans is undocumented upstream —
   see A3.
 - **Numeric custom-field values on read:** any ticket may carry agent-set numeric values;
-  the local `CustomFieldValue` decoder accepts them (blocker fixed by design; regression-
+  the local `CustomField` decoder accepts them (blocker fixed by design; regression-
   tested per R12).
 - **Form referencing inactive/deleted fields:** `ticket_field_ids` entries missing from the
   fields map are skipped silently (Zendesk allows stale references).
@@ -343,7 +345,7 @@ Verified context (2026-07-23):
   change).
 - **A4 (replaced by design):** custom-field value robustness is covered per direction by
   the requirement that owns it — encode by R7's exact-JSON-payload test, decode by R12's
-  `CustomFieldValue` fixture test (JSON number/string/bool/array) — not assumed of
+  `CustomField` fixture test (JSON number/string/bool/array) — not assumed of
   go-zendesk (whose unmarshaler is known-broken for numbers).
 - **Q1 (deferred):** should `priority`/`type` defaults be configurable per connector
   instance? Not in v1; forms can set defaults in Zendesk.
