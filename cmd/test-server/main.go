@@ -16,8 +16,8 @@ type server struct {
 	state *State
 }
 
-func run() error {
-	srv := &server{state: NewState()}
+// newMux builds the route table shared by run() and the integration tests.
+func newMux(srv *server) *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /organizations.json", requireAuth(srv.handleListOrganizations))
@@ -33,11 +33,23 @@ func run() error {
 	mux.HandleFunc("GET /group_memberships.json", requireAuth(srv.handleListGroupMemberships))
 	mux.HandleFunc("GET /custom_roles.json", requireAuth(srv.handleListCustomRoles))
 
+	mux.HandleFunc("POST /tickets.json", requireAuth(srv.handleCreateTicket))
+	mux.HandleFunc("GET /tickets/{idWithExt}", requireAuth(srv.handleGetTicket))
+	mux.HandleFunc("GET /ticket_fields.json", requireAuth(srv.handleListTicketFields))
+	mux.HandleFunc("GET /ticket_forms.json", requireAuth(srv.handleListTicketForms))
+
 	// Debug-only, not part of the Zendesk API: exposes the per-path call
 	// counters so a validation script can assert the old per-org
 	// GetOrganizationUsers endpoint (/organizations/{id}/users.json) is never
 	// hit after the org.Grants -> team_member.Grants inversion.
 	mux.HandleFunc("GET /__debug/calls", srv.handleDebugCalls)
+
+	return mux
+}
+
+func run() error {
+	srv := &server{state: NewState()}
+	mux := newMux(srv)
 
 	httpSrv := &http.Server{
 		Addr:              listenAddr,

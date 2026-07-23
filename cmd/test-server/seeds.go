@@ -64,4 +64,47 @@ func seed(s *State) {
 	s.addGroupMembership(&GroupMembership{ID: 301, UserID: 102, GroupID: 201})
 	s.addGroupMembership(&GroupMembership{ID: 302, UserID: 103, GroupID: 201})
 	s.addGroupMembership(&GroupMembership{ID: 303, UserID: 101, GroupID: 202})
+
+	seedTickets(s)
+}
+
+// seedTickets seeds ticket forms and fields for the ticketing e2e test
+// (spec R13): one active form (401) listing fields 501-507 — one of each
+// mapped type (text, tagger, date, checkbox, multiselect) plus the two cases
+// the schema mapper must skip/exclude (504 integer, 505 the subject system
+// field) — and one inactive form (402) that must never surface as a schema.
+// All fields are Required: false so a ticket supplying only field 502 still
+// passes ValidateTicket.
+func seedTickets(s *State) {
+	fields := []*TicketField{
+		{ID: 501, Type: "text", Title: "Justification", Active: true, Removable: true},
+		{
+			ID: 502, Type: "tagger", Title: "Access Level", Active: true, Removable: true,
+			Options: []map[string]any{
+				{"name": "Option A", "value": "opt_a"},
+				{"name": "Option B", "value": "opt_b"},
+			},
+		},
+		{ID: 503, Type: "date", Title: "Needed By", Active: true, Removable: true},
+		{ID: 504, Type: "integer", Title: "Ignored Count", Active: true, Removable: true},
+		{ID: 505, Type: "subject", Title: "Subject", Active: true, Removable: false},
+		{ID: 506, Type: "checkbox", Title: "Urgent", Active: true, Removable: true},
+		{
+			ID: 507, Type: "multiselect", Title: "Tags", Active: true, Removable: true,
+			Options: []map[string]any{
+				{"name": "Tag One", "value": "tag_one"},
+			},
+		},
+	}
+	for _, f := range fields {
+		s.addTicketField(f)
+	}
+
+	forms := []*TicketForm{
+		{ID: 401, Name: "Access Request", Active: true, TicketFieldIDs: []int64{501, 502, 503, 504, 505, 506, 507}},
+		{ID: 402, Name: "Retired", Active: false, TicketFieldIDs: []int64{501}},
+	}
+	for _, f := range forms {
+		s.addTicketForm(f)
+	}
 }

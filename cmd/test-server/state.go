@@ -39,6 +39,39 @@ type GroupMembership struct {
 	GroupID int64
 }
 
+// TicketField mirrors the fields baton-zendesk reads off zendesk.TicketField.
+type TicketField struct {
+	ID        int64
+	Type      string
+	Title     string
+	Active    bool
+	Removable bool
+	Required  bool
+	Options   []map[string]any // custom_field_options entries: {"name","value"}.
+}
+
+// TicketForm mirrors zendesk.TicketForm.
+type TicketForm struct {
+	ID             int64
+	Name           string
+	Active         bool
+	TicketFieldIDs []int64
+}
+
+// Ticket is a created mock ticket, echoed back by GET /tickets/{id}.
+type Ticket struct {
+	ID           int64
+	Subject      string
+	Description  string
+	Status       string
+	Priority     string
+	Type         string
+	RequesterID  int64
+	TicketFormID int64
+	Tags         []string
+	CustomFields []map[string]any
+}
+
 // State is the in-memory backing store for every handler. All access goes
 // through its methods so the lock scope is always one method call — see
 // CLAUDE.md-style state container conventions.
@@ -59,6 +92,11 @@ type State struct {
 	groupList        []*Group
 	groupMemberships []*GroupMembership
 
+	ticketFields []*TicketField
+	ticketForms  []*TicketForm
+	tickets      map[int64]*Ticket
+	nextTicketID int64
+
 	// callCounts records every request path this server has served, keyed by
 	// r.Method+" "+r.URL.Path (query string stripped). Used by /__debug/calls
 	// to assert the old per-org GetOrganizationUsers endpoint
@@ -74,6 +112,8 @@ func NewState() *State {
 		memberships:      make(map[int64]*OrgMembership),
 		groups:           make(map[int64]*Group),
 		nextMembershipID: 1001,
+		tickets:          make(map[int64]*Ticket),
+		nextTicketID:     9001,
 		callCounts:       make(map[string]int),
 	}
 	seed(s)
@@ -252,4 +292,51 @@ func (s *State) ListGroupMembershipsByGroup(groupID int64) []*GroupMembership {
 		}
 	}
 	return out
+}
+
+func (s *State) addTicketField(f *TicketField) {
+	cp := *f
+	s.ticketFields = append(s.ticketFields, &cp)
+}
+
+func (s *State) addTicketForm(f *TicketForm) {
+	cp := *f
+	s.ticketForms = append(s.ticketForms, &cp)
+}
+
+// Copy-on-read like the sibling accessors (ListOrganizations et al.) so
+// callers never alias shared state.
+func (s *State) ListTicketFields() []*TicketField {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*TicketField, len(s.ticketFields))
+	copy(out, s.ticketFields)
+	return out
+}
+
+func (s *State) ListTicketForms() []*TicketForm {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]*TicketForm, len(s.ticketForms))
+	copy(out, s.ticketForms)
+	return out
+}
+
+func (s *State) CreateTicket(t *Ticket) *Ticket {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t.ID = s.nextTicketID
+	s.nextTicketID++
+	if t.Status == "" {
+		t.Status = "new"
+	}
+	s.tickets[t.ID] = t
+	return t
+}
+
+func (s *State) GetTicket(id int64) (*Ticket, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tickets[id]
+	return t, ok
 }
