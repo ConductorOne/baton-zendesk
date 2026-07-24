@@ -19,7 +19,7 @@ func TestTicketingEndToEnd(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	ctx := context.Background()
-	c, err := connector.New(ctx, nil, "", testEmail, testAPIToken, ts.URL)
+	c, err := connector.New(ctx, nil, "", testEmail, testAPIToken, ts.URL, nil)
 	if err != nil {
 		t.Fatalf("connector.New: %v", err)
 	}

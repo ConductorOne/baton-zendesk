@@ -6,6 +6,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 )
@@ -17,6 +18,11 @@ type Connector struct {
 	email         string
 	apiToken      string
 	baseURL       string
+	// syncOrgs reports whether the "org" resource type is in scope for this
+	// sync, per the configured sync filter (or true when no filter was set).
+	// team_member.Grants uses this to gate its cross-type org grant emission
+	// (see teamMemberBuilder and teamMemberResourceType.Grants).
+	syncOrgs bool
 }
 
 // ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
@@ -25,7 +31,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 		groupBuilder(d.zendeskClient),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient),
-		teamMemberBuilder(d.zendeskClient, d.orgs),
+		teamMemberBuilder(d.zendeskClient, d.orgs, d.syncOrgs),
 	}
 }
 
@@ -89,7 +95,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string) (*Connector, error) {
+func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string, opts *cli.ConnectorOpts) (*Connector, error) {
 	var zc *client.ZendeskClient
 	if apiToken != "" {
 		var err error
@@ -99,6 +105,8 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		}
 	}
 
+	syncOrgs := opts == nil || opts.WillSyncResourceType(OrgResourceTypeID)
+
 	return &Connector{
 		zendeskClient: zc,
 		orgs:          zendeskOrgs,
@@ -106,5 +114,6 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		email:         email,
 		apiToken:      apiToken,
 		baseURL:       baseURL,
+		syncOrgs:      syncOrgs,
 	}, nil
 }

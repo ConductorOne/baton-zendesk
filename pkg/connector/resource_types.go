@@ -2,6 +2,12 @@ package connector
 
 import v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 
+// OrgResourceTypeID is the "org" resource type ID. Exported so callers (e.g.
+// team_member.go's cross-type grant emission) can gate on it via
+// cli.ConnectorOpts.WillSyncResourceType without risking drift from
+// resourceTypeOrg.Id.
+const OrgResourceTypeID = "org"
+
 var (
 	resourceTypeGroup = &v2.ResourceType{
 		Id:          "group",
@@ -11,7 +17,7 @@ var (
 		},
 	}
 	resourceTypeOrg = &v2.ResourceType{
-		Id:          "org",
+		Id:          OrgResourceTypeID,
 		DisplayName: "Org",
 		Annotations: withSkipGrants(withSkipEntitlements(v1AnnotationsForResourceType("org"))),
 	}

@@ -33,6 +33,11 @@ type teamMemberResourceType struct {
 	// here stay in scope with the orgs that were actually synced. Empty means
 	// "all orgs".
 	filterToOrgs map[string]struct{}
+	// syncOrgs gates the cross-type org grant emission in Grants below: when
+	// the sync filter excludes the "org" resource type, emitting org grants
+	// here would be wasted work (and wasted API calls) for a type that was
+	// never synced. See Connector.syncOrgs.
+	syncOrgs bool
 }
 
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -91,7 +96,13 @@ func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource,
 // resourceTypeOrg skips its own Grants via the SkipGrants annotation; the SDK
 // stores these grants against the org resource because grants are keyed by
 // their entitlement, not by the resource being synced.
+// Guarded by t.syncOrgs: when the sync filter excludes "org", this entire
+// method is a no-op, since every line below exists only to produce org grants.
 func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
+	if !t.syncOrgs {
+		return nil, &rs.SyncOpResults{}, nil
+	}
+
 	l := ctxzap.Extract(ctx)
 
 	userID, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
@@ -254,10 +265,11 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, syncOrgs bool) *teamMemberResourceType {
 	return &teamMemberResourceType{
 		resourceType: resourceTypeTeam,
 		client:       zendeskClient,
 		filterToOrgs: orgFilterSet(orgs),
+		syncOrgs:     syncOrgs,
 	}
 }

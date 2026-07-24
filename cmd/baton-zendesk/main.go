@@ -29,14 +29,14 @@ func main() {
 	)
 }
 
-func getConnector(ctx context.Context, cfg *config.Zendesk, _ *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
-	cb, err := connector.New(ctx, cfg.Orgs, cfg.Subdomain, cfg.Email, cfg.ApiToken, cfg.BaseUrl)
+func getConnector(ctx context.Context, cfg *config.Zendesk, opts *cli.ConnectorOpts) (connectorbuilder.ConnectorBuilderV2, []connectorbuilder.Opt, error) {
+	cb, err := connector.New(ctx, cfg.Orgs, cfg.Subdomain, cfg.Email, cfg.ApiToken, cfg.BaseUrl, opts)
 	if err != nil {
 		return nil, nil, err
 	}
-	var opts []connectorbuilder.Opt
+	var builderOpts []connectorbuilder.Opt
 	if cfg.Ticketing {
-		opts = append(opts, connectorbuilder.WithTicketingEnabled())
+		builderOpts = append(builderOpts, connectorbuilder.WithTicketingEnabled())
 	}
-	return cb, opts, nil
+	return cb, builderOpts, nil
 }
