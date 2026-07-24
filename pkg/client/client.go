@@ -218,7 +218,7 @@ func (z *ZendeskClient) listUsersCBP(ctx context.Context, path string, params ur
 func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTypeUser *v2.ResourceType, parentResourceID *v2.ResourceId) (*v2.Resource, error) {
 	var (
 		firstName, lastName string
-		userStatus          v2.UserTrait_Status_Status
+		resourceStatus      v2.Status_ResourceStatus
 	)
 	names := strings.SplitN(account.Name, " ", 2)
 
@@ -237,15 +237,13 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 		"login":      account.Email,
 	}
 	if account.Active {
-		userStatus = v2.UserTrait_Status_STATUS_ENABLED
+		resourceStatus = v2.Status_RESOURCE_STATUS_ENABLED
 	} else {
-		userStatus = v2.UserTrait_Status_STATUS_DISABLED
+		resourceStatus = v2.Status_RESOURCE_STATUS_DISABLED
 	}
 
 	userTraitOptions := []rs.UserTraitOption{
-		rs.WithUserProfile(profile),
 		rs.WithEmail(account.Email, true),
-		rs.WithStatus(userStatus),
 	}
 
 	ret, err := rs.NewUserResource(
@@ -254,6 +252,8 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 		account.ID,
 		userTraitOptions,
 		rs.WithParentResourceID(parentResourceID),
+		rs.WithResourceProfile(profile),
+		rs.WithResourceStatus(resourceStatus, ""),
 	)
 	if err != nil {
 		return nil, err

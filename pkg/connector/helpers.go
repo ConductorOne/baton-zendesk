@@ -140,20 +140,18 @@ func getUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) 
 	}
 
 	accountType := v2.UserTrait_ACCOUNT_TYPE_HUMAN
-	var status v2.UserTrait_Status_Status
+	var resourceStatus v2.Status_ResourceStatus
 	switch user.Suspended {
 	case true:
-		status = v2.UserTrait_Status_STATUS_DISABLED
+		resourceStatus = v2.Status_RESOURCE_STATUS_DISABLED
 	case false:
-		status = v2.UserTrait_Status_STATUS_ENABLED
+		resourceStatus = v2.Status_RESOURCE_STATUS_ENABLED
 	default:
-		status = v2.UserTrait_Status_STATUS_UNSPECIFIED
+		resourceStatus = v2.Status_RESOURCE_STATUS_UNSPECIFIED
 	}
 
 	userTraitOptions := []rs.UserTraitOption{
-		rs.WithUserProfile(profile),
 		rs.WithEmail(user.Email, true),
-		rs.WithStatus(status),
 		rs.WithAccountType(accountType),
 	}
 
@@ -162,6 +160,8 @@ func getUserRoleResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) 
 		resourceTypeTeam,
 		user.ID,
 		userTraitOptions,
+		rs.WithResourceProfile(profile),
+		rs.WithResourceStatus(resourceStatus, ""),
 	)
 	if err != nil {
 		return nil, err
@@ -187,7 +187,7 @@ func splitFullName(name string) (string, string) {
 }
 
 func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2.Resource, error) {
-	var userStatus = v2.UserTrait_Status_STATUS_ENABLED
+	var resourceStatus = v2.Status_RESOURCE_STATUS_ENABLED
 	firstName, lastName := splitFullName(user.Name)
 	profile := map[string]interface{}{
 		userIDKey:    fmt.Sprint(user.ID),
@@ -197,14 +197,17 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 		"email":      user.Email,
 	}
 	if !user.Active || user.Suspended {
-		userStatus = v2.UserTrait_Status_STATUS_DISABLED
+		resourceStatus = v2.Status_RESOURCE_STATUS_DISABLED
 	}
 
 	userTraits := []rs.UserTraitOption{
-		rs.WithUserProfile(profile),
-		rs.WithStatus(userStatus),
 		rs.WithUserLogin(user.Email),
 		rs.WithEmail(user.Email, true),
+	}
+
+	resourceOpts := []rs.ResourceOption{
+		rs.WithResourceProfile(profile),
+		rs.WithResourceStatus(resourceStatus, ""),
 	}
 
 	if user.LastLoginAt.String() != "" {
@@ -217,7 +220,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 	if user.CreatedAt.String() != "" {
 		createdAt, err := time.Parse("2006-01-02T15:04:05.000000Z", user.CreatedAt.String())
 		if err == nil {
-			userTraits = append(userTraits, rs.WithCreatedAt(createdAt))
+			resourceOpts = append(resourceOpts, rs.WithResourceCreatedAt(createdAt))
 		}
 	}
 
@@ -226,7 +229,7 @@ func getTeamResource(user *zendesk.User, resourceTypeTeam *v2.ResourceType) (*v2
 		displayName = user.Email
 	}
 
-	ret, err := rs.NewUserResource(displayName, resourceTypeTeam, user.ID, userTraits)
+	ret, err := rs.NewUserResource(displayName, resourceTypeTeam, user.ID, userTraits, resourceOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -240,13 +243,13 @@ func getGroupResource(group zendesk.Group, resourceTypeGroup *v2.ResourceType, p
 		"group_id":   group.ID,
 		"group_name": group.Name,
 	}
-	groupTraitOptions := []rs.GroupTraitOption{rs.WithGroupProfile(profile)}
 	ret, err := rs.NewGroupResource(
 		group.Name,
 		resourceTypeGroup,
 		group.ID,
-		groupTraitOptions,
+		nil,
 		rs.WithParentResourceID(parentResourceID),
+		rs.WithResourceProfile(profile),
 	)
 	if err != nil {
 		return nil, err
@@ -281,16 +284,13 @@ func getRoleResource(role *zendesk.CustomRole, resourceTypeRole *v2.ResourceType
 		"role_name": role.Name,
 	}
 
-	roleTraitOptions := []rs.RoleTraitOption{
-		rs.WithRoleProfile(profile),
-	}
-
 	ret, err := rs.NewRoleResource(
 		role.Name,
 		resourceTypeRole,
 		role.ID,
-		roleTraitOptions,
+		nil,
 		rs.WithParentResourceID(parentResourceID),
+		rs.WithResourceProfile(profile),
 	)
 	if err != nil {
 		return nil, err

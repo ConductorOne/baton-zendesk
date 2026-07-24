@@ -94,3 +94,35 @@ curl -u 'agent@example.com/token:test-token' \
 curl -u 'agent@example.com/token:test-token' \
   'http://127.0.0.1:8765/organization_memberships.json?user_id=101&page[size]=100'
 ```
+
+## Ticketing flow
+
+With the server running, exercise ticketing end to end:
+
+    go run ./cmd/baton-zendesk --base-url http://127.0.0.1:8765 \
+      --email agent@example.com --api-token test-token --subdomain unused \
+      --ticketing --list-ticket-schemas
+
+    go run ./cmd/baton-zendesk --base-url http://127.0.0.1:8765 \
+      --email agent@example.com --api-token test-token --subdomain unused \
+      --ticketing --bulk-create-ticket --bulk-ticket-template-path ./ticket.json
+
+(The automated equivalent runs in CI as TestTicketingEndToEnd.)
+
+A minimal `ticket.json` for the bulk template (schema 401 is the seeded "Access Request" form):
+
+```json
+{
+  "tickets": [
+    {
+      "schema_id": "401",
+      "display_name": "Access to prod",
+      "description": "please",
+      "labels": [],
+      "custom_fields": {},
+      "status_id": "",
+      "requested_for_id": ""
+    }
+  ]
+}
+```

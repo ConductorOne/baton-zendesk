@@ -34,5 +34,9 @@ func getConnector(ctx context.Context, cfg *config.Zendesk, _ *cli.ConnectorOpts
 	if err != nil {
 		return nil, nil, err
 	}
-	return cb, nil, nil
+	var opts []connectorbuilder.Opt
+	if cfg.Ticketing {
+		opts = append(opts, connectorbuilder.WithTicketingEnabled())
+	}
+	return cb, opts, nil
 }
