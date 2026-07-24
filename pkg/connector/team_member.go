@@ -19,6 +19,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -33,15 +34,45 @@ type teamMemberResourceType struct {
 	// here stay in scope with the orgs that were actually synced. Empty means
 	// "all orgs".
 	filterToOrgs map[string]struct{}
-	// syncOrgs gates the cross-type org grant emission in Grants below: when
-	// the sync filter excludes the "org" resource type, emitting org grants
-	// here would be wasted work (and wasted API calls) for a type that was
-	// never synced. See Connector.syncOrgs.
-	syncOrgs bool
+	// orgOutOfScope reports whether the "org" resource type has been excluded
+	// from this sync via the configured sync filter. The zero value (false) is
+	// the correct default: org in scope, full capability. Only true when a
+	// real *cli.ConnectorOpts explicitly excludes "org" (see Connector.orgOutOfScope
+	// and New). ResourceType below uses this to annotate the resource type so
+	// the SDK's sync engine skips Entitlements()/Grants() entirely when org is
+	// out of scope, rather than gating inside Grants itself.
+	orgOutOfScope bool
 }
 
+// ResourceType returns a clone of the package-level team_member resource type
+// annotated to reflect whether "org" is in scope for this sync:
+//   - orgOutOfScope=false (org in scope, the default): annotated with
+//     SkipEntitlements only. team_member has no entitlements of its own (see
+//     Entitlements below), so skipping the per-resource Entitlements() call is
+//     always a safe optimization; Grants() still runs normally to emit the
+//     cross-type org grants.
+//   - orgOutOfScope=true: annotated with SkipEntitlementsAndGrants instead,
+//     which causes the SDK's sync engine to skip Entitlements() AND Grants()
+//     entirely for every team_member resource, since Grants' only purpose is
+//     producing org grants that would never be ingested anyway.
+//
+// A clone is returned (never t.resourceType directly) so the package-level
+// resourceTypeTeam var is never mutated by this instance-specific annotation.
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
-	return t.resourceType
+	rt, ok := proto.Clone(t.resourceType).(*v2.ResourceType)
+	if !ok {
+		return t.resourceType
+	}
+
+	annos := annotations.Annotations(rt.GetAnnotations())
+	if t.orgOutOfScope {
+		annos.Update(&v2.SkipEntitlementsAndGrants{})
+	} else {
+		annos.Update(&v2.SkipEntitlements{})
+	}
+	rt.Annotations = annos
+
+	return rt
 }
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
@@ -96,13 +127,7 @@ func (t *teamMemberResourceType) Entitlements(_ context.Context, _ *v2.Resource,
 // resourceTypeOrg skips its own Grants via the SkipGrants annotation; the SDK
 // stores these grants against the org resource because grants are keyed by
 // their entitlement, not by the resource being synced.
-// Guarded by t.syncOrgs: when the sync filter excludes "org", this entire
-// method is a no-op, since every line below exists only to produce org grants.
 func (t *teamMemberResourceType) Grants(ctx context.Context, resource *v2.Resource, opts rs.SyncOpAttrs) ([]*v2.Grant, *rs.SyncOpResults, error) {
-	if !t.syncOrgs {
-		return nil, &rs.SyncOpResults{}, nil
-	}
-
 	l := ctxzap.Extract(ctx)
 
 	userID, err := strconv.ParseInt(resource.Id.Resource, 10, 64)
@@ -265,11 +290,11 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, syncOrgs bool) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, orgOutOfScope bool) *teamMemberResourceType {
 	return &teamMemberResourceType{
-		resourceType: resourceTypeTeam,
-		client:       zendeskClient,
-		filterToOrgs: orgFilterSet(orgs),
-		syncOrgs:     syncOrgs,
+		resourceType:  resourceTypeTeam,
+		client:        zendeskClient,
+		filterToOrgs:  orgFilterSet(orgs),
+		orgOutOfScope: orgOutOfScope,
 	}
 }
