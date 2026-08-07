@@ -44,35 +44,8 @@ type teamMemberResourceType struct {
 	skipOrgResourceType bool
 }
 
-// ResourceType returns a clone of the package-level team_member resource type
-// annotated to reflect whether "org" is in scope for this sync:
-//   - skipOrgResourceType=false (org in scope, the default): annotated with
-//     SkipEntitlements only. team_member has no entitlements of its own (see
-//     Entitlements below), so skipping the per-resource Entitlements() call is
-//     always a safe optimization; Grants() still runs normally to emit the
-//     cross-type org grants.
-//   - skipOrgResourceType=true: annotated with SkipEntitlementsAndGrants instead,
-//     which causes the SDK's sync engine to skip Entitlements() AND Grants()
-//     entirely for every team_member resource, since Grants' only purpose is
-//     producing org grants that would never be ingested anyway.
-//
-// A clone is returned (never t.resourceType directly) so the package-level
-// resourceTypeTeam var is never mutated by this instance-specific annotation.
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
-	rt, ok := proto.Clone(t.resourceType).(*v2.ResourceType)
-	if !ok {
-		return t.resourceType
-	}
-
-	annos := annotations.Annotations(rt.GetAnnotations())
-	if t.skipOrgResourceType {
-		annos.Update(&v2.SkipEntitlementsAndGrants{})
-	} else {
-		annos.Update(&v2.SkipEntitlements{})
-	}
-	rt.Annotations = annos
-
-	return rt
+	return t.resourceType
 }
 
 // Team Members are users with the role of "agent" or "admin". users with the role of "end-user" are not team members, but rather customers.
@@ -290,9 +263,21 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
+// teamMemberBuilder returns the team_member syncer. team_member has no
+// entitlements of its own, and its only grants are cross-type org grants, so
+// when org is excluded from the sync the grants pass is skipped too.
 func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, skipOrgResourceType bool) *teamMemberResourceType {
+	rt := proto.Clone(resourceTypeTeam).(*v2.ResourceType)
+	annos := annotations.Annotations(rt.GetAnnotations())
+	if skipOrgResourceType {
+		annos.Update(&v2.SkipEntitlementsAndGrants{})
+	} else {
+		annos.Update(&v2.SkipEntitlements{})
+	}
+	rt.Annotations = annos
+
 	return &teamMemberResourceType{
-		resourceType:        resourceTypeTeam,
+		resourceType:        rt,
 		client:              zendeskClient,
 		filterToOrgs:        orgFilterSet(orgs),
 		skipOrgResourceType: skipOrgResourceType,
