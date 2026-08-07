@@ -6,6 +6,7 @@ import (
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
+	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
 	"github.com/conductorone/baton-zendesk/pkg/client"
 )
@@ -17,6 +18,18 @@ type Connector struct {
 	email         string
 	apiToken      string
 	baseURL       string
+	// orgOutOfScope reports whether the "org" resource type has been excluded
+	// from this sync via the configured sync filter. The zero value (false) is
+	// the correct default: org in scope. This is deliberately the inverse
+	// polarity of a "syncOrgs" bool: the zero-value Connector{} constructed
+	// directly by connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2 in
+	// cmd/baton-zendesk/main.go (used to generate baton_capabilities.json)
+	// never goes through New, so it must default to the correct (unfiltered)
+	// capability set. team_member.ResourceType uses this to annotate the
+	// team_member resource type so the SDK's sync engine skips
+	// Entitlements()/Grants() for it entirely when org is out of scope (see
+	// teamMemberBuilder and teamMemberResourceType.ResourceType).
+	orgOutOfScope bool
 }
 
 // ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
@@ -25,7 +38,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 		groupBuilder(d.zendeskClient),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient),
-		teamMemberBuilder(d.zendeskClient, d.orgs),
+		teamMemberBuilder(d.zendeskClient, d.orgs, d.orgOutOfScope),
 	}
 }
 
@@ -89,7 +102,7 @@ func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, erro
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string) (*Connector, error) {
+func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string, opts *cli.ConnectorOpts) (*Connector, error) {
 	var zc *client.ZendeskClient
 	if apiToken != "" {
 		var err error
@@ -99,6 +112,8 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		}
 	}
 
+	orgOutOfScope := opts != nil && !opts.WillSyncResourceType(OrgResourceTypeID)
+
 	return &Connector{
 		zendeskClient: zc,
 		orgs:          zendeskOrgs,
@@ -106,5 +121,6 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		email:         email,
 		apiToken:      apiToken,
 		baseURL:       baseURL,
+		orgOutOfScope: orgOutOfScope,
 	}, nil
 }
