@@ -18,18 +18,19 @@ type Connector struct {
 	email         string
 	apiToken      string
 	baseURL       string
-	// orgOutOfScope reports whether the "org" resource type has been excluded
-	// from this sync via the configured sync filter. The zero value (false) is
-	// the correct default: org in scope. This is deliberately the inverse
-	// polarity of a "syncOrgs" bool: the zero-value Connector{} constructed
-	// directly by connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2 in
-	// cmd/baton-zendesk/main.go (used to generate baton_capabilities.json)
-	// never goes through New, so it must default to the correct (unfiltered)
-	// capability set. team_member.ResourceType uses this to annotate the
-	// team_member resource type so the SDK's sync engine skips
-	// Entitlements()/Grants() for it entirely when org is out of scope (see
-	// teamMemberBuilder and teamMemberResourceType.ResourceType).
-	orgOutOfScope bool
+	// skipOrgResourceType reports whether the "org" resource type has been
+	// excluded from this sync via the configured sync filter.
+	//
+	// Named for the SKIP condition rather than the sync condition so the zero
+	// value (false, "don't skip") is the safe default. main.go registers a
+	// zero-value Connector{} as the capabilities factory
+	// (connectorrunner.WithDefaultCapabilitiesConnectorBuilderV2), which never
+	// goes through New; a syncOrgResourceType-shaped bool would read false
+	// there and wrongly report org as filtered out in baton_capabilities.json.
+	//
+	// teamMemberBuilder uses this to annotate the team_member resource type so
+	// the SDK skips Entitlements()/Grants() entirely when org is out of scope.
+	skipOrgResourceType bool
 }
 
 // ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
@@ -38,7 +39,7 @@ func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.Reso
 		groupBuilder(d.zendeskClient),
 		orgBuilder(d.zendeskClient, d.orgs),
 		roleBuilder(d.zendeskClient),
-		teamMemberBuilder(d.zendeskClient, d.orgs, d.orgOutOfScope),
+		teamMemberBuilder(d.zendeskClient, d.orgs, d.skipOrgResourceType),
 	}
 }
 
@@ -112,15 +113,15 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		}
 	}
 
-	orgOutOfScope := opts != nil && !opts.WillSyncResourceType(OrgResourceTypeID)
+	skipOrgResourceType := opts != nil && !opts.WillSyncResourceType(OrgResourceTypeID)
 
 	return &Connector{
-		zendeskClient: zc,
-		orgs:          zendeskOrgs,
-		subdomain:     subdomain,
-		email:         email,
-		apiToken:      apiToken,
-		baseURL:       baseURL,
-		orgOutOfScope: orgOutOfScope,
+		zendeskClient:       zc,
+		orgs:                zendeskOrgs,
+		subdomain:           subdomain,
+		email:               email,
+		apiToken:            apiToken,
+		baseURL:             baseURL,
+		skipOrgResourceType: skipOrgResourceType,
 	}, nil
 }

@@ -34,24 +34,24 @@ type teamMemberResourceType struct {
 	// here stay in scope with the orgs that were actually synced. Empty means
 	// "all orgs".
 	filterToOrgs map[string]struct{}
-	// orgOutOfScope reports whether the "org" resource type has been excluded
+	// skipOrgResourceType reports whether the "org" resource type has been excluded
 	// from this sync via the configured sync filter. The zero value (false) is
 	// the correct default: org in scope, full capability. Only true when a
-	// real *cli.ConnectorOpts explicitly excludes "org" (see Connector.orgOutOfScope
+	// real *cli.ConnectorOpts explicitly excludes "org" (see Connector.skipOrgResourceType
 	// and New). ResourceType below uses this to annotate the resource type so
 	// the SDK's sync engine skips Entitlements()/Grants() entirely when org is
 	// out of scope, rather than gating inside Grants itself.
-	orgOutOfScope bool
+	skipOrgResourceType bool
 }
 
 // ResourceType returns a clone of the package-level team_member resource type
 // annotated to reflect whether "org" is in scope for this sync:
-//   - orgOutOfScope=false (org in scope, the default): annotated with
+//   - skipOrgResourceType=false (org in scope, the default): annotated with
 //     SkipEntitlements only. team_member has no entitlements of its own (see
 //     Entitlements below), so skipping the per-resource Entitlements() call is
 //     always a safe optimization; Grants() still runs normally to emit the
 //     cross-type org grants.
-//   - orgOutOfScope=true: annotated with SkipEntitlementsAndGrants instead,
+//   - skipOrgResourceType=true: annotated with SkipEntitlementsAndGrants instead,
 //     which causes the SDK's sync engine to skip Entitlements() AND Grants()
 //     entirely for every team_member resource, since Grants' only purpose is
 //     producing org grants that would never be ingested anyway.
@@ -65,7 +65,7 @@ func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceT
 	}
 
 	annos := annotations.Annotations(rt.GetAnnotations())
-	if t.orgOutOfScope {
+	if t.skipOrgResourceType {
 		annos.Update(&v2.SkipEntitlementsAndGrants{})
 	} else {
 		annos.Update(&v2.SkipEntitlements{})
@@ -290,11 +290,11 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, orgOutOfScope bool) *teamMemberResourceType {
+func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, skipOrgResourceType bool) *teamMemberResourceType {
 	return &teamMemberResourceType{
-		resourceType:  resourceTypeTeam,
-		client:        zendeskClient,
-		filterToOrgs:  orgFilterSet(orgs),
-		orgOutOfScope: orgOutOfScope,
+		resourceType:        resourceTypeTeam,
+		client:              zendeskClient,
+		filterToOrgs:        orgFilterSet(orgs),
+		skipOrgResourceType: skipOrgResourceType,
 	}
 }

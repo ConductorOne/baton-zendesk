@@ -248,11 +248,11 @@ func TestGetOrganizationMembershipByUser_FindsMembershipOnPage2(t *testing.T) {
 // the group path just as it is for the org path above.
 func TestGetGroupMembershipByGroup_FindsMembershipOnPage2(t *testing.T) {
 	const (
-		userID        = int64(42)
-		groupAID      = int64(555) // on page 1 — not what we want
-		groupBID      = int64(777) // on page 2 — the target
-		groupAMemID   = int64(1001)
-		groupBMemID   = int64(1002)
+		userID      = int64(42)
+		groupAID    = int64(555) // on page 1 — not what we want
+		groupBID    = int64(777) // on page 2 — the target
+		groupAMemID = int64(1001)
+		groupBMemID = int64(1002)
 	)
 
 	nextPageURL := "/group_memberships.json?page=2"

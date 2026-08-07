@@ -118,7 +118,7 @@ func TestTeamMemberGrants_EmitsOrgGrants(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	// orgOutOfScope=true here on purpose: Grants must emit the grant
+	// skipOrgResourceType=true here on purpose: Grants must emit the grant
 	// regardless, since gating is now solely the SDK's job via ResourceType's
 	// annotations, not something Grants itself decides.
 	tm := teamMemberBuilder(newTeamMemberTestClient(t, srv.URL), nil, true)
