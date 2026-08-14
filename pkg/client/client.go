@@ -231,7 +231,7 @@ func (z *ZendeskClient) GetUserAccountResource(account *zendesk.User, resourceTy
 	}
 
 	profile := map[string]interface{}{
-		userIDKey:   fmt.Sprintf("account:%d", account.ID),
+		userIDKey:    fmt.Sprintf("account:%d", account.ID),
 		"first_name": firstName,
 		"last_name":  lastName,
 		"login":      account.Email,

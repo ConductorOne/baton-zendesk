@@ -19,6 +19,7 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -33,6 +34,14 @@ type teamMemberResourceType struct {
 	// here stay in scope with the orgs that were actually synced. Empty means
 	// "all orgs".
 	filterToOrgs map[string]struct{}
+	// skipOrgResourceType reports whether the "org" resource type has been excluded
+	// from this sync via the configured sync filter. The zero value (false) is
+	// the correct default: org in scope, full capability. Only true when a
+	// real *cli.ConnectorOpts explicitly excludes "org" (see Connector.skipOrgResourceType
+	// and New). ResourceType below uses this to annotate the resource type so
+	// the SDK's sync engine skips Entitlements()/Grants() entirely when org is
+	// out of scope, rather than gating inside Grants itself.
+	skipOrgResourceType bool
 }
 
 func (t *teamMemberResourceType) ResourceType(ctx context.Context) *v2.ResourceType {
@@ -254,10 +263,23 @@ func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.Reso
 	return nil, nil
 }
 
-func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string) *teamMemberResourceType {
+// teamMemberBuilder returns the team_member syncer. team_member has no
+// entitlements of its own, and its only grants are cross-type org grants, so
+// when org is excluded from the sync the grants pass is skipped too.
+func teamMemberBuilder(zendeskClient *client.ZendeskClient, orgs []string, skipOrgResourceType bool) *teamMemberResourceType {
+	rt := proto.Clone(resourceTypeTeam).(*v2.ResourceType)
+	annos := annotations.Annotations(rt.GetAnnotations())
+	if skipOrgResourceType {
+		annos.Update(&v2.SkipEntitlementsAndGrants{})
+	} else {
+		annos.Update(&v2.SkipEntitlements{})
+	}
+	rt.Annotations = annos
+
 	return &teamMemberResourceType{
-		resourceType: resourceTypeTeam,
-		client:       zendeskClient,
-		filterToOrgs: orgFilterSet(orgs),
+		resourceType:        rt,
+		client:              zendeskClient,
+		filterToOrgs:        orgFilterSet(orgs),
+		skipOrgResourceType: skipOrgResourceType,
 	}
 }

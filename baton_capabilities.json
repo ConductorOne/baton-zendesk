@@ -68,6 +68,9 @@
           {
             "@type": "type.googleapis.com/c1.connector.v2.V1Identifier",
             "id": "team_member"
+          },
+          {
+            "@type": "type.googleapis.com/c1.connector.v2.SkipEntitlements"
           }
         ]
       },
