@@ -1,0 +1,1678 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Zendesk API (baton-zendesk connector surface)",
+    "version": "1.0.0",
+    "description": "Describes only the Zendesk endpoints baton-zendesk calls. Scope is derived from pkg/client/{client,tickets}.go; request sites that go through the vendored go-zendesk SDK were resolved to their paths in vendor/github.com/nukosuke/go-zendesk/zendesk (accessed 2026-09-21), and response shapes come from that SDK's structs plus the connector's own ticket types. The Zendesk documentation URL for each operation is cited inline in pkg/client and is carried through to `externalDocs` below.\n\nTwo pagination styles coexist, and which one an endpoint uses is load-bearing. Cursor-based pagination (CBP) sends `page[size]` and `page[after]` and reads `meta.has_more`/`meta.after_cursor`; offset-based pagination (OBP) sends `page` and reads a link envelope. `page[size]` is not optional on the dual-mode endpoints: without it Zendesk falls back to OBP, omits `meta` entirely, and the sync stops after page one (pkg/client/client.go:19).\n\nThree of the user-listing calls hand-roll their URL rather than going through the SDK's option encoder, because that encoder emits an empty `query=` parameter which silently disables CBP on those endpoints (tracked as CXH-1907).\n\nTicket create and read use the connector's own Ticket type rather than the SDK's: go-zendesk's CustomField.UnmarshalJSON rejects JSON numbers, so any ticket carrying a numeric custom-field value fails to decode through the vendored typed methods — including values on fields this connector never touches.\n\nTwo drain loops are explicitly bounded and error rather than truncate: ticket forms at 10 pages and ticket fields at 50 pages."
+  },
+  "servers": [
+    {
+      "url": "https://{subdomain}.zendesk.com/api/v2",
+      "description": "Zendesk instance, built from the `subdomain` config field. A `base-url` config value takes precedence over this and replaces the whole URL.",
+      "variables": {
+        "subdomain": {
+          "default": "example"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "apiTokenBasic": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "users",
+      "description": "Users, including creation, update, and both stages of deletion."
+    },
+    {
+      "name": "groups",
+      "description": "Groups and group membership."
+    },
+    {
+      "name": "organizations",
+      "description": "Organizations and organization membership."
+    },
+    {
+      "name": "roles",
+      "description": "Custom agent roles."
+    },
+    {
+      "name": "tickets",
+      "description": "Tickets plus the ticket forms and fields backing the ticketing schema."
+    }
+  ],
+  "paths": {
+    "/users.json": {
+      "get": {
+        "operationId": "listUsers",
+        "tags": [
+          "users"
+        ],
+        "summary": "List users, optionally filtered by role",
+        "description": "Called in two variants against the same path. The team-member sync filters by the built-in `role`; the custom-role grant sync filters by `permission_set`. URL is hand-rolled to keep CBP enabled (CXH-1907).",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users"
+        },
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "description": "Built-in role filter. Omitted when listing all users.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "end-user",
+                "agent",
+                "admin"
+              ]
+            }
+          },
+          {
+            "name": "permission_set",
+            "in": "query",
+            "description": "Custom role ID. Mutually exclusive with `role` in this connector — the two variants never send both.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of users.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsersResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Create a user",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#create-user"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "user"
+                ],
+                "properties": {
+                  "user": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organizations/{organization_id}/users.json": {
+      "get": {
+        "operationId": "listOrganizationUsers",
+        "tags": [
+          "users",
+          "organizations"
+        ],
+        "summary": "List the users in an organization",
+        "description": "Same hand-rolled CBP path as listUsers, scoped to one organization.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users-in-an-organization"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrganizationId"
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "description": "Built-in role filter. Omitted when listing all users in the organization.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "end-user",
+                "agent",
+                "admin"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of users.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{user_id}.json": {
+      "get": {
+        "operationId": "getUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Get a user",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Update a user",
+        "description": "The connector sends an arbitrary field map rather than a typed user, so the request body is open — whichever attributes the caller wants changed, wrapped in a `user` object.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Passed through as map[string]any. In practice the caller supplies a `user` object carrying the attributes to change.",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Soft-delete a user",
+        "description": "The connector treats a 200 reported through the SDK's error type as success, because go-zendesk raises an error for some 200 responses on this endpoint.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#delete-user"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User soft-deleted."
+          }
+        }
+      }
+    },
+    "/deleted_users/{user_id}.json": {
+      "delete": {
+        "operationId": "permanentlyDeleteUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Permanently delete a soft-deleted user",
+        "description": "Second stage of deletion — only valid after deleteUser. Same 200-through-error handling.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User permanently deleted."
+          }
+        }
+      }
+    },
+    "/groups.json": {
+      "get": {
+        "operationId": "listGroups",
+        "tags": [
+          "groups"
+        ],
+        "summary": "List groups",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/groups/{group_id}.json": {
+      "get": {
+        "operationId": "getGroup",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Get a group",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/GroupId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "$ref": "#/components/schemas/Group"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group_memberships.json": {
+      "get": {
+        "operationId": "listGroupMemberships",
+        "tags": [
+          "groups"
+        ],
+        "summary": "List group memberships",
+        "description": "Hit two different ways. The grant sync pages by cursor, filtering on `group_id`. The provisioning path (finding an existing membership before deleting it) pages by offset with `page`, filtering on both `group_id` and `user_id` — it walks pages until it finds the matching pair. Sending the cursor and offset parameter sets together is not supported.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships"
+        },
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Sent only on the offset-paginated provisioning lookup.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of group memberships.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMembershipsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createGroupMembership",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Assign a user to a group",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/groups/group_memberships/#list-memberships"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "group_membership"
+                ],
+                "properties": {
+                  "group_membership": {
+                    "$ref": "#/components/schemas/GroupMembership"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created membership.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "group_membership": {
+                      "$ref": "#/components/schemas/GroupMembership"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group_memberships/{group_membership_id}": {
+      "delete": {
+        "operationId": "deleteGroupMembership",
+        "tags": [
+          "groups"
+        ],
+        "summary": "Remove a user from a group",
+        "description": "Note the absence of a `.json` suffix here, unlike the sibling list and create paths — this is how the client builds it. The membership ID is not known up front; it is resolved first by walking listGroupMemberships for the user/group pair.",
+        "parameters": [
+          {
+            "name": "group_membership_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Membership removed."
+          }
+        }
+      }
+    },
+    "/organizations.json": {
+      "get": {
+        "operationId": "listOrganizations",
+        "tags": [
+          "organizations"
+        ],
+        "summary": "List organizations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of organizations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organizations/{organization_id}.json": {
+      "get": {
+        "operationId": "getOrganization",
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Get an organization",
+        "description": "The connector reads only `name` from this response, to label the organization resource.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrganizationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "organization": {
+                      "$ref": "#/components/schemas/Organization"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization_memberships.json": {
+      "get": {
+        "operationId": "listOrganizationMemberships",
+        "tags": [
+          "organizations"
+        ],
+        "summary": "List organization memberships",
+        "description": "Same dual shape as listGroupMemberships. The grant sync pages by cursor filtering on `user_id`, with the URL hand-rolled to keep CBP enabled (CXH-1907). The provisioning lookup pages by offset filtering on `user_id` and `organization_id`.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#list-memberships"
+        },
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "organization_id",
+            "in": "query",
+            "description": "Sent only on the offset-paginated provisioning lookup.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          },
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of organization memberships.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationMembershipsResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOrganizationMembership",
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Add a user to an organization",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/organizations/organization_memberships/#create-membership"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "organization_membership"
+                ],
+                "properties": {
+                  "organization_membership": {
+                    "$ref": "#/components/schemas/OrganizationMembership"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created membership.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "organization_membership": {
+                      "$ref": "#/components/schemas/OrganizationMembership"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/organization_memberships/{organization_membership_id}": {
+      "delete": {
+        "operationId": "deleteOrganizationMembership",
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Remove a user from an organization",
+        "description": "No `.json` suffix, same as deleteGroupMembership. The ID is resolved first by walking listOrganizationMemberships.",
+        "parameters": [
+          {
+            "name": "organization_membership_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Membership removed."
+          }
+        }
+      }
+    },
+    "/custom_roles.json": {
+      "get": {
+        "operationId": "listCustomRoles",
+        "tags": [
+          "roles"
+        ],
+        "summary": "List custom agent roles",
+        "description": "Unpaginated — the connector takes whatever a single response returns. Each role's ID is fed back to listUsers as `permission_set` to build role grants.",
+        "responses": {
+          "200": {
+            "description": "Custom roles.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "custom_roles": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CustomRole"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets.json": {
+      "post": {
+        "operationId": "createTicket",
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Create a ticket",
+        "description": "Uses the connector's own Ticket type, not the SDK's — see the note in `info.description`.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#create-ticket"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "ticket"
+                ],
+                "properties": {
+                  "ticket": {
+                    "$ref": "#/components/schemas/Ticket"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created ticket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "$ref": "#/components/schemas/Ticket"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tickets/{ticket_id}.json": {
+      "get": {
+        "operationId": "getTicket",
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Get a ticket",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/tickets/tickets/#show-ticket"
+        },
+        "parameters": [
+          {
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ticket.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket": {
+                      "$ref": "#/components/schemas/Ticket"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ticket_forms.json": {
+      "get": {
+        "operationId": "listTicketForms",
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List ticket forms",
+        "description": "Offset-paginated, not cursor-paginated. The connector drains every page with `per_page` at 100 and errors out past 10 pages rather than truncating silently.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_forms/#list-ticket-forms"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageNumber"
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Set to 100 by the connector.",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of ticket forms.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket_forms": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketForm"
+                      }
+                    },
+                    "next_page": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Offset-pagination link; presence drives the drain loop."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ticket_forms/{ticket_form_id}.json": {
+      "get": {
+        "operationId": "getTicketForm",
+        "tags": [
+          "tickets"
+        ],
+        "summary": "Get a ticket form",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_forms/#show-ticket-form"
+        },
+        "parameters": [
+          {
+            "name": "ticket_form_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ticket form.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket_form": {
+                      "$ref": "#/components/schemas/TicketForm"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ticket_fields.json": {
+      "get": {
+        "operationId": "listTicketFields",
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List ticket fields",
+        "description": "Cursor-paginated. Drained fully, bounded at 50 pages, erroring rather than truncating.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/tickets/ticket_fields/#list-ticket-fields"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageAfter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of ticket fields.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ticket_fields": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TicketField"
+                      }
+                    },
+                    "meta": {
+                      "$ref": "#/components/schemas/CursorPaginationMeta"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiTokenBasic": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "Zendesk API token auth. The username is the configured email with `/token` appended; the password is the API token."
+      }
+    },
+    "parameters": {
+      "UserId": {
+        "name": "user_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "GroupId": {
+        "name": "group_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "OrganizationId": {
+        "name": "organization_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      },
+      "PageSize": {
+        "name": "page[size]",
+        "in": "query",
+        "description": "Cursor page size, hardcoded to 100. Load-bearing: omitting it makes Zendesk fall back to offset pagination and drop `meta` from the response, which stops the sync after the first page.",
+        "schema": {
+          "type": "integer",
+          "default": 100
+        }
+      },
+      "PageAfter": {
+        "name": "page[after]",
+        "in": "query",
+        "description": "Cursor from the previous response's `meta.after_cursor`. Omitted on the first request.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "PageNumber": {
+        "name": "page",
+        "in": "query",
+        "description": "1-based page number, for the offset-paginated calls only. Never combined with the `page[...]` cursor parameters.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "schemas": {
+      "CursorPaginationMeta": {
+        "type": "object",
+        "description": "Cursor pagination state. The connector returns `after_cursor` as its next page token when `has_more` is true, and an empty token otherwise.",
+        "properties": {
+          "has_more": {
+            "type": "boolean"
+          },
+          "after_cursor": {
+            "type": "string"
+          },
+          "before_cursor": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "description": "The connector decodes go-zendesk's full User struct. Fields it actively reads are id, name, email and active; the rest are decoded and available.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean",
+            "description": "Drives the resource's enabled/disabled status."
+          },
+          "alias": {
+            "type": "string"
+          },
+          "chat_only": {
+            "type": "boolean"
+          },
+          "custom_role_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default_group_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "details": {
+            "type": "string"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "iana_time_zone": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "locale_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "moderator": {
+            "type": "boolean"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "only_private_comments": {
+            "type": "boolean"
+          },
+          "organization_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "photo": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "remote_photo_url": {
+            "type": "string"
+          },
+          "restricted_agent": {
+            "type": "boolean"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "end-user",
+              "agent",
+              "admin"
+            ]
+          },
+          "role_type": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shared": {
+            "type": "boolean"
+          },
+          "shared_agent": {
+            "type": "boolean"
+          },
+          "shared_phone_number": {
+            "type": "boolean"
+          },
+          "signature": {
+            "type": "string"
+          },
+          "suspended": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ticket_restriction": {
+            "type": "string"
+          },
+          "time_zone": {
+            "type": "string"
+          },
+          "two_factor_auth_enabled": {
+            "type": "boolean"
+          },
+          "user_fields": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "verified": {
+            "type": "boolean"
+          },
+          "report_csv": {
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UsersResponse": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/User"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPaginationMeta"
+          }
+        }
+      },
+      "Group": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GroupsResponse": {
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Group"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPaginationMeta"
+          }
+        }
+      },
+      "GroupMembership": {
+        "type": "object",
+        "description": "The `user_id`/`group_id` pair is what the connector matches on when resolving a membership ID for deletion.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "group_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GroupMembershipsResponse": {
+        "type": "object",
+        "properties": {
+          "group_memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupMembership"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPaginationMeta"
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "details": {
+            "type": "string"
+          },
+          "domain_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "group_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "shared_tickets": {
+            "type": "boolean"
+          },
+          "shared_comments": {
+            "type": "boolean"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "organization_fields": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "OrganizationsResponse": {
+        "type": "object",
+        "properties": {
+          "organizations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Organization"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPaginationMeta"
+          }
+        }
+      },
+      "OrganizationMembership": {
+        "type": "object",
+        "description": "Note the name field is keyed `organization_name`, not `name`, unlike GroupMembership.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "organization_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OrganizationMembershipsResponse": {
+        "type": "object",
+        "properties": {
+          "organization_memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrganizationMembership"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/CursorPaginationMeta"
+          }
+        }
+      },
+      "CustomRole": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Fed to listUsers as `permission_set`."
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "team_member_count": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "configuration": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "role_type": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CustomField": {
+        "type": "object",
+        "description": "A custom-field value. The connector's own unmarshaller accepts string, boolean, number, array of strings, and null; the vendored SDK's rejects numbers, which is why ticket read and create bypass it.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value": {
+            "description": "string, boolean, number, array of strings, or null.",
+            "type": [
+              "string",
+              "boolean",
+              "number",
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Ticket": {
+        "type": "object",
+        "description": "The subset of Zendesk's ticket object this connector reads and writes. `comment`, `requester_id` and `ticket_form_id` are create-only and are omitted from responses by Zendesk.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "description": "Derived by Zendesk from the create-only first comment."
+          },
+          "status": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "requester_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Create-only."
+          },
+          "ticket_form_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Create-only."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "custom_fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomField"
+            }
+          },
+          "comment": {
+            "type": "object",
+            "description": "Create-only first comment.",
+            "properties": {
+              "body": {
+                "type": "string"
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TicketForm": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "raw_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "raw_display_name": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "end_user_visible": {
+            "type": "boolean"
+          },
+          "default": {
+            "type": "boolean"
+          },
+          "ticket_field_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "in_all_brands": {
+            "type": "boolean"
+          },
+          "restricted_brand_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        }
+      },
+      "TicketField": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "url": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "raw_title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "raw_description": {
+            "type": "string"
+          },
+          "position": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "collapsed_for_agents": {
+            "type": "boolean"
+          },
+          "regexp_for_validation": {
+            "type": "string"
+          },
+          "title_in_portal": {
+            "type": "string"
+          },
+          "raw_title_in_portal": {
+            "type": "string"
+          },
+          "visible_in_portal": {
+            "type": "boolean"
+          },
+          "editable_in_portal": {
+            "type": "boolean"
+          },
+          "required_in_portal": {
+            "type": "boolean"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "system_field_options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "custom_field_options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "sub_type_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "removable": {
+            "type": "boolean"
+          },
+          "agent_description": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
