@@ -83,7 +83,7 @@ var (
 			Name:        AuthMethodOAuthClientCredentials,
 			DisplayName: "OAuth client credentials",
 			HelpText: "In Zendesk Admin Center go to Apps and integrations > APIs > OAuth clients and create a Confidential client. " +
-				"Copy the identifier and secret. The client must be created by a Zendesk admin; ConductorOne actions are attributed to that user.",
+				"Copy the identifier and secret. The client must be created by a Zendesk admin; C1 actions are attributed to that user.",
 			Fields: []field.SchemaField{
 				SubdomainField,
 				OAuthClientIDField,

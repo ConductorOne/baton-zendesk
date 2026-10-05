@@ -180,7 +180,7 @@
     {
       "name": "oauth-client-credentials",
       "displayName": "OAuth client credentials",
-      "helpText": "In Zendesk Admin Center go to Apps and integrations \u003e APIs \u003e OAuth clients and create a Confidential client. Copy the identifier and secret. The client must be created by a Zendesk admin; ConductorOne actions are attributed to that user.",
+      "helpText": "In Zendesk Admin Center go to Apps and integrations \u003e APIs \u003e OAuth clients and create a Confidential client. Copy the identifier and secret. The client must be created by a Zendesk admin; C1 actions are attributed to that user.",
       "fields": [
         "subdomain",
         "oauth-client-id",
