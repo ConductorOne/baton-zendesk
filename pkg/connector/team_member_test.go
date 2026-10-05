@@ -18,7 +18,7 @@ import (
 // newTicketTestConnector in ticket_test.go.
 func newTeamMemberTestClient(t *testing.T, baseURL string) *client.ZendeskClient {
 	t.Helper()
-	c, err := client.New(context.Background(), nil, "", "test@example.com", "token", baseURL)
+	c, err := client.New(context.Background(), nil, "", baseURL, client.AuthConfig{Email: "test@example.com", APIToken: "token"})
 	if err != nil {
 		t.Fatalf("client.New: %v", err)
 	}

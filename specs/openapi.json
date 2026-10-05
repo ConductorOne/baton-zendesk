@@ -19,9 +19,19 @@
   "security": [
     {
       "apiTokenBasic": []
+    },
+    {
+      "oauthClientCredentials": [
+        "read",
+        "write"
+      ]
     }
   ],
   "tags": [
+    {
+      "name": "oauth",
+      "description": "OAuth token acquisition for the oauth-client-credentials auth method."
+    },
     {
       "name": "users",
       "description": "Users, including creation, update, and both stages of deletion."
@@ -44,6 +54,108 @@
     }
   ],
   "paths": {
+    "/oauth/tokens": {
+      "post": {
+        "operationId": "createClientCredentialsToken",
+        "tags": [
+          "oauth"
+        ],
+        "summary": "Request an access token with the client credentials grant",
+        "description": "Lives at the origin root, not under `/api/v2`. Called by the connector's token source in pkg/client/oauth.go when no cached token is valid. The request is sent with `Content-Type: application/json`.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/"
+        },
+        "servers": [
+          {
+            "url": "https://{subdomain}.zendesk.com",
+            "description": "Zendesk instance origin. When `base-url` is set, its scheme and host are used instead.",
+            "variables": {
+              "subdomain": {
+                "default": "example"
+              }
+            }
+          }
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "grant_type",
+                  "client_id",
+                  "client_secret"
+                ],
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_credentials"
+                    ]
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "description": "Unique identifier of the confidential OAuth client."
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "description": "OAuth client secret."
+                  },
+                  "scope": {
+                    "type": "string",
+                    "description": "Space-separated scopes. Omitted when no scopes are configured, which Zendesk treats as full read and write."
+                  },
+                  "expires_in": {
+                    "type": "integer",
+                    "minimum": 300,
+                    "maximum": 172800,
+                    "description": "Token lifetime in seconds. The connector always sends 7200."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string"
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "description": "Lifetime in seconds; the connector renews the token shortly before it elapses."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or client credentials. Mapped to Unauthenticated."
+          },
+          "401": {
+            "description": "Client authentication failed. Mapped to Unauthenticated."
+          },
+          "403": {
+            "description": "Requested scopes not allowed for the client. Mapped to PermissionDenied."
+          },
+          "429": {
+            "description": "Rate limited. Mapped to ResourceExhausted with the Retry-After data."
+          }
+        }
+      }
+    },
     "/users.json": {
       "get": {
         "operationId": "listUsers",
@@ -187,6 +299,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UsersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me.json": {
+      "get": {
+        "operationId": "getCurrentUser",
+        "tags": [
+          "users"
+        ],
+        "summary": "Get the user the credentials authenticate as",
+        "description": "Called by the connector's Validate. Validation fails unless `role` is `admin`. Zendesk can answer unauthenticated requests with an anonymous end-user instead of a 401, which the role check also rejects.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#show-the-currently-authenticated-user"
+        },
+        "responses": {
+          "200": {
+            "description": "Current user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
                 }
               }
             }
@@ -946,6 +1088,19 @@
         "type": "http",
         "scheme": "basic",
         "description": "Zendesk API token auth. The username is the configured email with `/token` appended; the password is the API token."
+      },
+      "oauthClientCredentials": {
+        "type": "oauth2",
+        "description": "Zendesk OAuth client credentials grant, selected with `auth-method=oauth-client-credentials`. The connector POSTs a JSON body (not a form) to `https://{subdomain}.zendesk.com/oauth/tokens` (or the origin of `base-url`), caches the access token in memory, and sends it as `Authorization: Bearer`. No refresh token is issued; on expiry or a 401 `invalid_token` the connector requests a new token and retries the request once.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "https://example.zendesk.com/oauth/tokens",
+            "scopes": {
+              "read": "Read access to all resources the connector syncs.",
+              "write": "Write access, needed for provisioning and ticketing."
+            }
+          }
+        }
       }
     },
     "parameters": {

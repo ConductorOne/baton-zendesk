@@ -70,7 +70,7 @@ func newTicketTestConnector(t *testing.T, fx ticketTestFixture) *Connector {
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	zc, err := client.New(context.Background(), nil, "", "test@example.com", "token", srv.URL)
+	zc, err := client.New(context.Background(), nil, "", srv.URL, client.AuthConfig{Email: "test@example.com", APIToken: "token"})
 	if err != nil {
 		t.Fatalf("client.New: %v", err)
 	}
@@ -237,7 +237,7 @@ func createTicketFixtureConnector(t *testing.T, capture *client.Ticket) *Connect
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 
-	zc, err := client.New(context.Background(), nil, "", "test@example.com", "token", srv.URL)
+	zc, err := client.New(context.Background(), nil, "", srv.URL, client.AuthConfig{Email: "test@example.com", APIToken: "token"})
 	if err != nil {
 		t.Fatalf("client.New: %v", err)
 	}

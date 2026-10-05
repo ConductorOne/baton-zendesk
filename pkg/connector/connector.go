@@ -2,22 +2,22 @@ package connector
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/annotations"
 	"github.com/conductorone/baton-sdk/pkg/cli"
 	"github.com/conductorone/baton-sdk/pkg/connectorbuilder"
+	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/conductorone/baton-zendesk/pkg/client"
+	"google.golang.org/grpc/codes"
 )
 
 type Connector struct {
 	orgs          []string
 	zendeskClient *client.ZendeskClient
 	subdomain     string
-	email         string
-	apiToken      string
-	baseURL       string
 	// skipOrgResourceType reports whether the "org" resource type has been
 	// excluded from this sync via the configured sync filter.
 	//
@@ -34,7 +34,7 @@ type Connector struct {
 }
 
 // ResourceSyncers returns a ResourceSyncerV2 for each resource type that should be synced from the upstream service.
-func (d *Connector) ResourceSyncers(ctx context.Context) []connectorbuilder.ResourceSyncerV2 {
+func (d *Connector) ResourceSyncers(_ context.Context) []connectorbuilder.ResourceSyncerV2 {
 	return []connectorbuilder.ResourceSyncerV2{
 		groupBuilder(d.zendeskClient),
 		orgBuilder(d.zendeskClient, d.orgs),
@@ -50,12 +50,12 @@ func (d *Connector) Close() error {
 
 // Asset takes an input AssetRef and attempts to fetch it using the connector's authenticated http client
 // It streams a response, always starting with a metadata object, following by chunked payloads for the asset.
-func (d *Connector) Asset(ctx context.Context, asset *v2.AssetRef) (string, io.ReadCloser, error) {
+func (d *Connector) Asset(_ context.Context, _ *v2.AssetRef) (string, io.ReadCloser, error) {
 	return "", nil, nil
 }
 
 // Metadata returns metadata about the connector.
-func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error) {
+func (d *Connector) Metadata(_ context.Context) (*v2.ConnectorMetadata, error) {
 	return &v2.ConnectorMetadata{
 		DisplayName: "Zendesk Connector",
 		Description: "Connector syncing users, groups, and roles from Zendesk.",
@@ -99,18 +99,24 @@ func (d *Connector) Metadata(ctx context.Context) (*v2.ConnectorMetadata, error)
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
 // to be sure that they are valid.
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
+	me, err := d.zendeskClient.GetCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("baton-zendesk: validate credentials: %w", err)
+	}
+	// Zendesk answers /users/me with an anonymous end-user instead of an error for some unauthenticated requests.
+	if me.Role != teamRoleAdmin {
+		return nil, uhttp.WrapErrors(codes.PermissionDenied, fmt.Sprintf(
+			"baton-zendesk: the credentials authenticate as user %d with role %q, but a Zendesk admin is required; "+
+				"for OAuth, the client must be created by an admin", me.ID, me.Role))
+	}
 	return nil, nil
 }
 
 // New returns a new instance of the connector.
-func New(ctx context.Context, zendeskOrgs []string, subdomain string, email string, apiToken string, baseURL string, opts *cli.ConnectorOpts) (*Connector, error) {
-	var zc *client.ZendeskClient
-	if apiToken != "" {
-		var err error
-		zc, err = client.New(ctx, nil, subdomain, email, apiToken, baseURL)
-		if err != nil {
-			return nil, err
-		}
+func New(ctx context.Context, zendeskOrgs []string, subdomain string, baseURL string, auth client.AuthConfig, opts *cli.ConnectorOpts) (*Connector, error) {
+	zc, err := client.New(ctx, nil, subdomain, baseURL, auth)
+	if err != nil {
+		return nil, err
 	}
 
 	skipOrgResourceType := opts != nil && !opts.WillSyncResourceType(OrgResourceTypeID)
@@ -119,9 +125,6 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, email stri
 		zendeskClient:       zc,
 		orgs:                zendeskOrgs,
 		subdomain:           subdomain,
-		email:               email,
-		apiToken:            apiToken,
-		baseURL:             baseURL,
 		skipOrgResourceType: skipOrgResourceType,
 	}, nil
 }

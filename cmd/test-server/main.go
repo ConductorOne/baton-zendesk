@@ -14,29 +14,35 @@ const listenAddr = "127.0.0.1:8765"
 
 type server struct {
 	state *State
+	oauth *oauthState
+}
+
+func newServer() *server {
+	return &server{state: NewState(), oauth: newOAuthState()}
 }
 
 // newMux builds the route table shared by run() and the integration tests.
 func newMux(srv *server) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /organizations.json", requireAuth(srv.handleListOrganizations))
-	mux.HandleFunc("GET /users.json", requireAuth(srv.handleListUsers))
+	mux.HandleFunc("POST /oauth/tokens", srv.handleOAuthTokens)
+	mux.HandleFunc("GET /organizations.json", srv.requireAuth(srv.handleListOrganizations))
+	mux.HandleFunc("GET /users.json", srv.requireAuth(srv.handleListUsers))
 	// Go's ServeMux requires a wildcard to occupy the whole path segment, so
 	// the ".json" suffix can't sit in the same {id} wildcard — capture it and
 	// strip the suffix in the handler instead.
-	mux.HandleFunc("GET /users/{idWithExt}", requireAuth(srv.handleGetUser))
-	mux.HandleFunc("GET /organization_memberships.json", requireAuth(srv.handleOrgMemberships))
-	mux.HandleFunc("POST /organization_memberships.json", requireAuth(srv.handleOrgMemberships))
-	mux.HandleFunc("DELETE /organization_memberships/{id}", requireAuth(srv.handleDeleteOrgMembership))
-	mux.HandleFunc("GET /groups.json", requireAuth(srv.handleListGroups))
-	mux.HandleFunc("GET /group_memberships.json", requireAuth(srv.handleListGroupMemberships))
-	mux.HandleFunc("GET /custom_roles.json", requireAuth(srv.handleListCustomRoles))
+	mux.HandleFunc("GET /users/{idWithExt}", srv.requireAuth(srv.handleGetUser))
+	mux.HandleFunc("GET /organization_memberships.json", srv.requireAuth(srv.handleOrgMemberships))
+	mux.HandleFunc("POST /organization_memberships.json", srv.requireAuth(srv.handleOrgMemberships))
+	mux.HandleFunc("DELETE /organization_memberships/{id}", srv.requireAuth(srv.handleDeleteOrgMembership))
+	mux.HandleFunc("GET /groups.json", srv.requireAuth(srv.handleListGroups))
+	mux.HandleFunc("GET /group_memberships.json", srv.requireAuth(srv.handleListGroupMemberships))
+	mux.HandleFunc("GET /custom_roles.json", srv.requireAuth(srv.handleListCustomRoles))
 
-	mux.HandleFunc("POST /tickets.json", requireAuth(srv.handleCreateTicket))
-	mux.HandleFunc("GET /tickets/{idWithExt}", requireAuth(srv.handleGetTicket))
-	mux.HandleFunc("GET /ticket_fields.json", requireAuth(srv.handleListTicketFields))
-	mux.HandleFunc("GET /ticket_forms.json", requireAuth(srv.handleListTicketForms))
+	mux.HandleFunc("POST /tickets.json", srv.requireAuth(srv.handleCreateTicket))
+	mux.HandleFunc("GET /tickets/{idWithExt}", srv.requireAuth(srv.handleGetTicket))
+	mux.HandleFunc("GET /ticket_fields.json", srv.requireAuth(srv.handleListTicketFields))
+	mux.HandleFunc("GET /ticket_forms.json", srv.requireAuth(srv.handleListTicketForms))
 
 	// Debug-only, not part of the Zendesk API: exposes the per-path call
 	// counters so a validation script can assert the old per-org
@@ -48,7 +54,7 @@ func newMux(srv *server) *http.ServeMux {
 }
 
 func run() error {
-	srv := &server{state: NewState()}
+	srv := newServer()
 	mux := newMux(srv)
 
 	httpSrv := &http.Server{
@@ -67,6 +73,7 @@ func run() error {
 	log.Printf("test-server: seeded %d orgs, %d team members, %d org memberships, %d groups",
 		len(srv.state.ListOrganizations()), len(teamMembers), membershipCount, len(srv.state.ListGroups()))
 	log.Printf("test-server: auth is Basic %s/token : %s", testEmail, testAPIToken)
+	log.Printf("test-server: or OAuth client credentials %s : %s", testOAuthClientID, testOAuthClientSecret)
 
 	return httpSrv.ListenAndServe()
 }

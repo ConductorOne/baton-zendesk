@@ -127,6 +127,40 @@
       }
     },
     {
+      "name": "oauth-client-id",
+      "displayName": "OAuth Client ID",
+      "description": "The unique identifier of the Zendesk OAuth client",
+      "isRequired": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
+    },
+    {
+      "name": "oauth-client-secret",
+      "displayName": "OAuth Client Secret",
+      "description": "The secret of the Zendesk OAuth client",
+      "isRequired": true,
+      "isSecret": true,
+      "stringField": {
+        "rules": {
+          "isRequired": true
+        }
+      }
+    },
+    {
+      "name": "oauth-scopes",
+      "displayName": "OAuth Scopes",
+      "description": "The scopes requested for the OAuth access token. Use only \"read\" for sync-only connections",
+      "stringSliceField": {
+        "defaultValue": [
+          "read",
+          "write"
+        ]
+      }
+    },
+    {
       "name": "orgs",
       "displayName": "Organizations",
       "description": "Limit syncing to specific organizations",
@@ -141,5 +175,35 @@
   ],
   "displayName": "Zendesk",
   "helpUrl": "/docs/baton/zendesk",
-  "iconUrl": "/static/app-icons/zendesk.svg"
+  "iconUrl": "/static/app-icons/zendesk.svg",
+  "fieldGroups": [
+    {
+      "name": "oauth-client-credentials",
+      "displayName": "OAuth client credentials",
+      "helpText": "In Zendesk Admin Center go to Apps and integrations \u003e APIs \u003e OAuth clients and create a Confidential client. Copy the identifier and secret. The client must be created by a Zendesk admin; ConductorOne actions are attributed to that user.",
+      "fields": [
+        "subdomain",
+        "oauth-client-id",
+        "oauth-client-secret",
+        "oauth-scopes",
+        "orgs",
+        "base-url",
+        "ticketing"
+      ]
+    },
+    {
+      "name": "api-token",
+      "displayName": "API token (deprecated by Zendesk 2027-04-30)",
+      "helpText": "Zendesk no longer allows new API tokens on accounts created after 28 July 2026, and on any account from 27 October 2026. Existing tokens stop working on 30 April 2027. Use OAuth client credentials instead.",
+      "fields": [
+        "subdomain",
+        "email",
+        "api-token",
+        "orgs",
+        "base-url",
+        "ticketing"
+      ],
+      "default": true
+    }
+  ]
 }

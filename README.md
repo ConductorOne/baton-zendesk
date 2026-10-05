@@ -12,7 +12,7 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
 ## Prerequisites
 
 1. Zendesk `trial account` sign up for a free Zendesk Support trial  [developer site](https://www.zendesk.com/register/)
-2. Authentication method set to `Token access`
+2. An authentication method: an OAuth client (recommended) or `Token access` (deprecated by Zendesk, see [Authentication](#authentication))
 3. Application Scopes:
   - manage team members
   - manage groups
@@ -20,9 +20,27 @@ Unlike a trial account, a sponsored account does not expire after 14 days.
   - grant resources
   - revoke resources
   - read/write tickets (required for ticketing feature)
-4. **Permissions for Provisioning Actions**: To use account provisioning features (create, delete, enable, disable users), the API token must belong to an account with one of the following permissions:
+4. **Permissions for Provisioning Actions**: To use account provisioning features (create, delete, enable, disable users), the credential must belong to an account with one of the following permissions:
   - **Admin** role, OR
   - **Agent** role with permission to edit end-user profiles
+
+## Authentication
+
+The auth method is selected with `BATON_AUTH_METHOD`. When it is unset, the connector uses `api-token`.
+
+| Env var | Flag | Auth method | Description |
+|---|---|---|---|
+| `BATON_SUBDOMAIN` | `--subdomain` | both | The Zendesk subdomain (required) |
+| `BATON_AUTH_METHOD` | `--auth-method` | — | `oauth-client-credentials` or `api-token` (default) |
+| `BATON_OAUTH_CLIENT_ID` | `--oauth-client-id` | `oauth-client-credentials` | Identifier of a confidential Zendesk OAuth client (required) |
+| `BATON_OAUTH_CLIENT_SECRET` | `--oauth-client-secret` | `oauth-client-credentials` | Secret of the OAuth client (required) |
+| `BATON_OAUTH_SCOPES` | `--oauth-scopes` | `oauth-client-credentials` | Scopes requested for the access token (default `read,write`; `read` is enough for sync only) |
+| `BATON_EMAIL` | `--email` | `api-token` | Email of the Zendesk user that owns the token (required) |
+| `BATON_API_TOKEN` | `--api-token` | `api-token` | Zendesk API token (required) |
+
+**OAuth client credentials.** Create a **Confidential** client in Admin Center > Apps and integrations > APIs > OAuth clients. The connector requests access tokens with the client credentials grant and renews them automatically; tokens are kept in memory only. Zendesk attributes every action to the admin who created the client, so create it from an admin account that won't be deprovisioned.
+
+**API token (deprecated).** Zendesk is retiring API tokens: accounts created on or after 2026-07-28 can't use them, no account can create new ones from 2026-10-27, and all remaining tokens stop working on 2027-04-30.
 
 ## Requesting a sponsored test account
 For a trial Support account, see
@@ -39,7 +57,7 @@ baton resources
 ## docker
 
 ```
-docker run --rm -v $(pwd):/out -e BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken public.ecr.aws/conductorone/baton-zendesk:latest -f "/out/sync.c1z"
+docker run --rm -v $(pwd):/out -e BATON_SUBDOMAIN=clientSubdomain -e BATON_AUTH_METHOD=oauth-client-credentials -e BATON_OAUTH_CLIENT_ID=oauthClientId -e BATON_OAUTH_CLIENT_SECRET=oauthClientSecret public.ecr.aws/conductorone/baton-zendesk:latest -f "/out/sync.c1z"
 docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c1z" resources
 ```
 
@@ -49,7 +67,7 @@ docker run --rm -v $(pwd):/out ghcr.io/conductorone/baton:latest -f "/out/sync.c
 go install github.com/conductorone/baton/cmd/baton@main
 go install github.com/conductorone/baton-zendesk/cmd/baton-zendesk@main
 
-BATON_SUBDOMAIN=clientSubdomain BATON_EMAIL=clientEmail BATON_API_TOKEN=apiToken baton-zendesk
+BATON_SUBDOMAIN=clientSubdomain BATON_AUTH_METHOD=oauth-client-credentials BATON_OAUTH_CLIENT_ID=oauthClientId BATON_OAUTH_CLIENT_SECRET=oauthClientSecret baton-zendesk
 baton resources
 ```
 
@@ -83,11 +101,15 @@ Available Commands:
 
 Flags:
       --api-token string       The Zendesk apitoken. ($BATON_API_TOKEN)
+      --auth-method string     The authentication method: oauth-client-credentials or api-token ($BATON_AUTH_METHOD)
       --client-id string       The client ID used to authenticate with ConductorOne ($BATON_CLIENT_ID)
       --client-secret string   The client secret used to authenticate with ConductorOne ($BATON_CLIENT_SECRET)
       --email string           The Zendesk email. ($BATON_EMAIL)
   -f, --file string            The path to the c1z file to sync with ($BATON_FILE) (default "sync.c1z")
   -h, --help                   help for baton-zendesk
+      --oauth-client-id string       The unique identifier of the Zendesk OAuth client ($BATON_OAUTH_CLIENT_ID)
+      --oauth-client-secret string   The secret of the Zendesk OAuth client ($BATON_OAUTH_CLIENT_SECRET)
+      --oauth-scopes strings         The scopes requested for the OAuth access token ($BATON_OAUTH_SCOPES) (default [read,write])
       --log-format string      The output format for logs: json, console ($BATON_LOG_FORMAT) (default "json")
       --log-level string       The log level: debug, info, warn, error ($BATON_LOG_LEVEL) (default "info")
       --orgs strings           Limit syncing to specific organizations. ($BATON_ORGS)
@@ -109,7 +131,7 @@ fulfillment (external ticket provisioning). Enable it with `--ticketing`.
   add-on), a single "Default" schema with all active custom fields is served instead.
 - **Completion:** a ticket is considered done when its status is `solved` or `closed`
   (`completed_at` approximates via the ticket's `updated_at`).
-- **Token scopes:** the API token must be able to read ticket fields and ticket forms and
+- **Credential scopes:** the credential must be able to read ticket fields and ticket forms and
   create/read tickets.
 - **v1 limitations:** integer/decimal custom fields are not exposed as schema fields;
   Zendesk custom ticket statuses are not supported (system statuses only); ticket creation

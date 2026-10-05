@@ -27,14 +27,20 @@ func (srv *server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGetUser backs resolveMemberRole's cache-miss fallback (GetUser).
+// handleGetUser backs resolveMemberRole's cache-miss fallback (GetUser) and Validate (users/me).
 // Doc URL: https://developer.zendesk.com/api-reference/ticketing/users/users/#show-user
 func (srv *server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimSuffix(r.PathValue("idWithExt"), ".json")
-	id, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]any{keyError: "InvalidId"})
-		return
+	var id int64
+	if idStr == "me" {
+		id = authenticatedUserID(r)
+	} else {
+		var err error
+		id, err = strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			writeJSONStatus(w, http.StatusBadRequest, map[string]any{keyError: "InvalidId"})
+			return
+		}
 	}
 	u, ok := srv.state.GetUser(id)
 	if !ok {
