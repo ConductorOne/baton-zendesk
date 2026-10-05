@@ -18,7 +18,7 @@ should become a permanent CI fixture.
 | Path | Method | Doc URL |
 |---|---|---|
 | `/oauth/tokens` | POST — client credentials grant, JSON body | https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/ |
-| `/users/me.json` | GET — the user behind the credential | https://developer.zendesk.com/api-reference/ticketing/users/users/#show-the-currently-authenticated-user |
+| `/users/me.json` | GET — the user behind the credential | https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self |
 | `/organizations.json` | GET (CBP) | https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/#list-organizations |
 | `/users.json` | GET (CBP, `role=admin\|agent`) | https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users |
 | `/users/{id}.json` | GET | https://developer.zendesk.com/api-reference/ticketing/users/users/#show-user |

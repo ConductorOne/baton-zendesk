@@ -187,10 +187,17 @@ func TestOAuthValidateFailures(t *testing.T) {
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("non-admin client owner: expected PermissionDenied, got %v", err)
 	}
+}
 
-	_, err = newTestConnector(t, ts.URL, client.AuthConfig{Email: testEmail, APIToken: testAPIToken}).Validate(ctx)
+func TestAPITokenValidateSkipsCredentialCheck(t *testing.T) {
+	srv, ts := newTestServer(t)
+
+	_, err := newTestConnector(t, ts.URL, client.AuthConfig{Email: testEmail, APIToken: "wrong"}).Validate(context.Background())
 	if err != nil {
 		t.Fatalf("api-token Validate: %v", err)
+	}
+	if got := srv.state.CallCounts()["GET /users/me.json"]; got != 0 {
+		t.Fatalf("api-token Validate must not call /users/me.json, got %d calls", got)
 	}
 }
 

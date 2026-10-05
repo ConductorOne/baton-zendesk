@@ -313,9 +313,9 @@
           "users"
         ],
         "summary": "Get the user the credentials authenticate as",
-        "description": "Called by the connector's Validate. Validation fails unless `role` is `admin`. Zendesk can answer unauthenticated requests with an anonymous end-user instead of a 401, which the role check also rejects.",
+        "description": "Called by the connector's Validate for the oauth-client-credentials auth method only (API-token connections skip validation). Validation fails with Unauthenticated when Zendesk returns an anonymous user (null `id`), and with PermissionDenied unless `role` is `admin`.",
         "externalDocs": {
-          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#show-the-currently-authenticated-user"
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self"
         },
         "responses": {
           "200": {

@@ -18,6 +18,7 @@ type Connector struct {
 	orgs          []string
 	zendeskClient *client.ZendeskClient
 	subdomain     string
+	oauth         bool
 	// skipOrgResourceType reports whether the "org" resource type has been
 	// excluded from this sync via the configured sync filter.
 	//
@@ -98,16 +99,24 @@ func (d *Connector) Metadata(_ context.Context) (*v2.ConnectorMetadata, error) {
 
 // Validate is called to ensure that the connector is properly configured. It should exercise any API credentials
 // to be sure that they are valid.
+// Only OAuth credentials are checked, so existing API-token connections keep working unchanged.
 func (d *Connector) Validate(ctx context.Context) (annotations.Annotations, error) {
+	if !d.oauth {
+		return nil, nil
+	}
+
 	me, err := d.zendeskClient.GetCurrentUser(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: validate credentials: %w", err)
+		return nil, fmt.Errorf("baton-zendesk: validate OAuth credentials: %w", err)
 	}
-	// Zendesk answers /users/me with an anonymous end-user instead of an error for some unauthenticated requests.
+	// Zendesk can answer /users/me with an anonymous user (null id) instead of a 401.
+	if me.ID == 0 {
+		return nil, uhttp.WrapErrors(codes.Unauthenticated, "baton-zendesk: the OAuth access token was not accepted by Zendesk")
+	}
+	// Client credentials tokens act as the client's creator, and provisioning needs that user to be an admin.
 	if me.Role != teamRoleAdmin {
 		return nil, uhttp.WrapErrors(codes.PermissionDenied, fmt.Sprintf(
-			"baton-zendesk: the credentials authenticate as user %d with role %q, but a Zendesk admin is required; "+
-				"for OAuth, the client must be created by an admin", me.ID, me.Role))
+			"baton-zendesk: the OAuth client was created by user %d with role %q; it must be created by a Zendesk admin", me.ID, me.Role))
 	}
 	return nil, nil
 }
@@ -125,6 +134,7 @@ func New(ctx context.Context, zendeskOrgs []string, subdomain string, baseURL st
 		zendeskClient:       zc,
 		orgs:                zendeskOrgs,
 		subdomain:           subdomain,
+		oauth:               auth.OAuth,
 		skipOrgResourceType: skipOrgResourceType,
 	}, nil
 }

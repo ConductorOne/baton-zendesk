@@ -9,6 +9,7 @@ require (
 	github.com/nukosuke/go-zendesk v0.18.0
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
 	go.uber.org/zap v1.28.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/text v0.41.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
@@ -132,7 +133,6 @@ require (
 	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect

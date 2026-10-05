@@ -32,7 +32,7 @@ const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
 	pathUser = "/users/%d.json"
 
-	// https://developer.zendesk.com/api-reference/ticketing/users/users/#show-the-currently-authenticated-user
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self
 	pathCurrentUser = "/users/me.json"
 
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
@@ -118,7 +118,7 @@ func newOAuthHTTPClient(httpClient *http.Client, subdomain string, baseURL strin
 
 // GetCurrentUser returns the user the credentials authenticate as.
 //
-// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#show-the-currently-authenticated-user
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self
 func (z *ZendeskClient) GetCurrentUser(ctx context.Context) (zendesk.User, error) {
 	body, err := z.client.Get(ctx, pathCurrentUser)
 	if err != nil {
