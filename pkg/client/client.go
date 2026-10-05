@@ -14,6 +14,7 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"google.golang.org/grpc/codes"
 )
@@ -59,8 +60,15 @@ type AuthConfig struct {
 }
 
 func New(ctx context.Context, httpClient *http.Client, subdomain string, baseURL string, auth AuthConfig) (*ZendeskClient, error) {
+	var err error
+	if httpClient == nil {
+		// uhttp's transport gives network failures the same retryable gRPC codes as uhttp.BaseHttpClient.
+		httpClient, err = uhttp.NewClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
+		if err != nil {
+			return nil, err
+		}
+	}
 	if auth.OAuth {
-		var err error
 		httpClient, err = newOAuthHTTPClient(httpClient, subdomain, baseURL, auth)
 		if err != nil {
 			return nil, err

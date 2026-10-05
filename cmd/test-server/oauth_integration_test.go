@@ -208,7 +208,7 @@ func TestOAuthTokenEndpointErrors(t *testing.T) {
 	}{
 		{http.StatusInternalServerError, codes.Unavailable},
 		{http.StatusServiceUnavailable, codes.Unavailable},
-		{http.StatusTooManyRequests, codes.ResourceExhausted},
+		{http.StatusTooManyRequests, codes.Unavailable},
 	}
 	for _, tt := range tests {
 		t.Run(http.StatusText(tt.status), func(t *testing.T) {

@@ -142,16 +142,19 @@
             }
           },
           "400": {
-            "description": "Invalid request or client credentials. Mapped to Unauthenticated."
+            "description": "Rejected request. Classified by the SDK from the RFC 6749 `error` param: `invalid_client`/`invalid_grant` map to Unauthenticated, `invalid_scope`/`invalid_request`/`unsupported_grant_type` to InvalidArgument."
           },
           "401": {
-            "description": "Client authentication failed. Mapped to Unauthenticated."
+            "description": "Client authentication failed (`invalid_client`). Mapped to Unauthenticated."
           },
           "403": {
-            "description": "Requested scopes not allowed for the client. Mapped to PermissionDenied."
+            "description": "Client not allowed to request these scopes. Mapped to PermissionDenied."
           },
           "429": {
-            "description": "Rate limited. Mapped to ResourceExhausted with the Retry-After data."
+            "description": "Rate limited. Mapped to Unavailable with the Retry-After data, so the SDK retries it."
+          },
+          "5XX": {
+            "description": "Mapped to Unavailable, so the SDK retries it, even when the body carries an `error` param."
           }
         }
       }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -27,6 +29,7 @@ const (
 	oauthTokenLifetimeSeconds = 7200
 
 	maxOAuthErrorBodyBytes = 4096
+	maxOAuthResponseBytes  = 1 << 20
 )
 
 type clientCredentialsRequest struct {
@@ -116,22 +119,29 @@ func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (*oauth2.Token
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	// Errors go through the SDK classifier so their gRPC codes match the SDK's own OAuth token sources.
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, uhttp.WrapErrors(codes.Unavailable, "baton-zendesk: OAuth token request failed", err)
+		return nil, uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: OAuth token request failed: %w", err))
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, oauthTokenError(resp)
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxOAuthResponseBytes))
+	if err != nil {
+		return nil, uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: read OAuth token response: %w", err))
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		err := uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: OAuth token request rejected: %w",
+			&oauth2.RetrieveError{Response: resp, Body: raw}))
+		return nil, s.withSetupHint(err, raw)
 	}
 
 	var body clientCredentialsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		return nil, fmt.Errorf("baton-zendesk: decode OAuth token response: %w", err)
 	}
 	if body.AccessToken == "" {
-		return nil, uhttp.WrapErrors(codes.Unauthenticated, "baton-zendesk: OAuth token response has no access token")
+		return nil, errors.New("baton-zendesk: OAuth token response has no access token")
 	}
 
 	token := &oauth2.Token{
@@ -146,25 +156,30 @@ func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (*oauth2.Token
 	return token, nil
 }
 
-func oauthTokenError(resp *http.Response) error {
-	var body oauthErrorResponse
-	_ = json.NewDecoder(io.LimitReader(resp.Body, maxOAuthErrorBodyBytes)).Decode(&body)
-	cause := fmt.Errorf("token endpoint returned %s: %s %s", resp.Status, body.Error, body.ErrorDescription)
-
-	switch {
-	case resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized:
-		return uhttp.WrapErrors(codes.Unauthenticated,
-			"baton-zendesk: OAuth client credentials rejected; check the client ID and secret, and that the client is confidential and active", cause)
-	case resp.StatusCode == http.StatusForbidden:
-		return uhttp.WrapErrors(codes.PermissionDenied,
-			"baton-zendesk: OAuth token request denied; the requested scopes may exceed the client's allowed scopes", cause)
-	case resp.StatusCode == http.StatusTooManyRequests:
-		return uhttp.WrapErrorsWithRateLimitInfo(codes.ResourceExhausted, resp, cause)
-	case resp.StatusCode >= http.StatusInternalServerError:
-		return uhttp.WrapErrors(codes.Unavailable, "baton-zendesk: OAuth token endpoint unavailable", cause)
-	default:
-		return uhttp.WrapErrors(codes.Unknown, "baton-zendesk: unexpected OAuth token endpoint response", cause)
+// withSetupHint prefixes rejections caused by connector or OAuth client settings with an actionable message,
+// keeping the SDK's gRPC code. Retryable errors are left as-is.
+func (s *clientCredentialsTokenSource) withSetupHint(err error, raw []byte) error {
+	code := status.Code(err)
+	if code == codes.Unavailable || code == codes.DeadlineExceeded {
+		return err
 	}
+	var body oauthErrorResponse
+	if json.Unmarshal(raw, &body) != nil {
+		return err
+	}
+
+	var hint string
+	switch body.Error {
+	case "invalid_scope":
+		hint = fmt.Sprintf("Zendesk rejected the requested OAuth scopes %q; set OAuth Scopes to scopes the Zendesk OAuth client allows", s.scope)
+	case "invalid_client":
+		hint = "Zendesk rejected the OAuth client; check the client ID and secret, and that the client is confidential and active"
+	case "unauthorized_client":
+		hint = "the Zendesk OAuth client is not allowed to use the client credentials grant"
+	default:
+		return err
+	}
+	return uhttp.WrapErrors(code, "baton-zendesk: "+hint, err)
 }
 
 // bearerTransport authenticates requests with the cached token and renews it once when Zendesk rejects it.
