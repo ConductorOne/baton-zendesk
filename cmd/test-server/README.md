@@ -11,13 +11,13 @@ should become a permanent CI fixture.
 | Real API | Test server |
 |---|---|
 | HTTP Basic, username `{email}/token`, password = API token | Same flow: `agent@example.com/token` / `test-token` |
-| OAuth client credentials (`POST /oauth/tokens`, JSON body), then `Authorization: Bearer` | Client `test-oauth-client` / `test-oauth-secret` (owned by admin 101), or `test-oauth-agent-client` (owned by agent 102) |
+| OAuth client credentials (`POST /oauth/tokens`, JSON or form body), then `Authorization: Bearer` | Client `test-oauth-client` / `test-oauth-secret` (owned by admin 101), or `test-oauth-agent-client` (owned by agent 102) |
 
 ## Endpoints
 
 | Path | Method | Doc URL |
 |---|---|---|
-| `/oauth/tokens` | POST — client credentials grant, JSON body | https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/ |
+| `/oauth/tokens` | POST — client credentials grant, JSON or form body | https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/ |
 | `/users/me.json` | GET — the user behind the credential | https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self |
 | `/organizations.json` | GET (CBP) | https://developer.zendesk.com/api-reference/ticketing/organizations/organizations/#list-organizations |
 | `/users.json` | GET (CBP, `role=admin\|agent`) | https://developer.zendesk.com/api-reference/ticketing/users/users/#list-users |

@@ -2,11 +2,13 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,27 +38,23 @@ func TestOAuthTokenURL(t *testing.T) {
 	}
 }
 
-func TestOAuthClientSendsJSONTokenRequestAndBearer(t *testing.T) {
+func TestOAuthClientSendsFormTokenRequestAndBearer(t *testing.T) {
 	var tokenRequests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case pathOAuthTokens:
 			tokenRequests.Add(1)
-			if ct := r.Header.Get("Content-Type"); ct != "application/json" {
-				t.Errorf("token request Content-Type = %q", ct)
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("parse token request: %v", err)
 			}
-			var body clientCredentialsRequest
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Errorf("decode token request: %v", err)
+			want := url.Values{
+				"grant_type": {"client_credentials"}, "client_id": {"id"}, "client_secret": {"secret"},
+				"scope": {"read write"}, "expires_in": {strconv.Itoa(oauthTokenLifetimeSeconds)},
 			}
-			want := clientCredentialsRequest{
-				GrantType: "client_credentials", ClientID: "id", ClientSecret: "secret",
-				Scope: "read write", ExpiresIn: oauthTokenLifetimeSeconds,
+			if !reflect.DeepEqual(r.PostForm, want) {
+				t.Errorf("token request = %v, want %v", r.PostForm, want)
 			}
-			if body != want {
-				t.Errorf("token request = %+v, want %+v", body, want)
-			}
-			_, _ = w.Write([]byte(`{"access_token":"abc","token_type":"bearer","expires_in":7200}`))
+			writeToken(w, "abc")
 		case pathCurrentUser:
 			if got := r.Header.Get("Authorization"); got != "Bearer abc" {
 				t.Errorf("Authorization = %q", got)
@@ -89,7 +87,7 @@ func TestOAuthRetryReplaysRequestBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == pathOAuthTokens {
 			n := tokenRequests.Add(1)
-			_, _ = fmt.Fprintf(w, `{"access_token":"token-%d","expires_in":7200}`, n)
+			writeToken(w, fmt.Sprintf("token-%d", n))
 			return
 		}
 		posts.Add(1)
@@ -122,7 +120,7 @@ func TestOAuthDoesNotRetryOtherUnauthorized(t *testing.T) {
 	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == pathOAuthTokens {
-			_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":7200}`))
+			writeToken(w, "abc")
 			return
 		}
 		calls.Add(1)
@@ -166,4 +164,10 @@ func TestOAuthRequiresClientCredentials(t *testing.T) {
 	if _, err := New(context.Background(), nil, "acme", "", AuthConfig{OAuth: true}); err == nil {
 		t.Fatal("expected an error for missing client credentials")
 	}
+}
+
+// writeToken answers a token request the way Zendesk does; the oauth2 library needs the JSON content type.
+func writeToken(w http.ResponseWriter, accessToken string) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"bearer","expires_in":7200}`, accessToken)
 }

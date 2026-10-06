@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"mime"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -106,7 +107,7 @@ func (o *oauthState) clientOwner(clientID string) (int64, bool) {
 	return id, ok
 }
 
-// handleOAuthTokens mocks the client credentials grant, which takes a JSON body.
+// handleOAuthTokens mocks the client credentials grant.
 // Doc URL: https://developer.zendesk.com/api-reference/ticketing/oauth/grant_type_tokens/
 func (srv *server) handleOAuthTokens(w http.ResponseWriter, r *http.Request) {
 	if status := srv.oauth.currentFailStatus(); status != 0 {
@@ -117,18 +118,8 @@ func (srv *server) handleOAuthTokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "application/json" {
-		writeJSONStatus(w, http.StatusBadRequest, map[string]any{keyError: "invalid_request"})
-		return
-	}
-	var req struct {
-		GrantType    string `json:"grant_type"`
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-		Scope        string `json:"scope"`
-		ExpiresIn    int    `json:"expires_in"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, ok := parseTokenRequest(r)
+	if !ok {
 		writeJSONStatus(w, http.StatusBadRequest, map[string]any{keyError: "invalid_request"})
 		return
 	}
@@ -164,4 +155,41 @@ func (srv *server) handleOAuthTokens(w http.ResponseWriter, r *http.Request) {
 		"scope":        req.Scope,
 		"expires_in":   int64(lifetime / time.Second),
 	})
+}
+
+type tokenRequest struct {
+	GrantType    string `json:"grant_type"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	Scope        string `json:"scope"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// parseTokenRequest reads a JSON or form-encoded body; Zendesk accepts both.
+func parseTokenRequest(r *http.Request) (tokenRequest, bool) {
+	var req tokenRequest
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		return req, false
+	}
+	switch mediaType {
+	case "application/json":
+		return req, json.NewDecoder(r.Body).Decode(&req) == nil
+	case "application/x-www-form-urlencoded":
+		if r.ParseForm() != nil {
+			return req, false
+		}
+		req.GrantType = r.PostForm.Get("grant_type")
+		req.ClientID = r.PostForm.Get("client_id")
+		req.ClientSecret = r.PostForm.Get("client_secret")
+		req.Scope = r.PostForm.Get("scope")
+		if v := r.PostForm.Get("expires_in"); v != "" {
+			if req.ExpiresIn, err = strconv.Atoi(v); err != nil {
+				return req, false
+			}
+		}
+		return req, true
+	default:
+		return req, false
+	}
 }

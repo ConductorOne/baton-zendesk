@@ -9,14 +9,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/conductorone/baton-sdk/pkg/uhttp"
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -29,36 +30,17 @@ const (
 	oauthTokenLifetimeSeconds = 7200
 
 	maxOAuthErrorBodyBytes = 4096
-	maxOAuthResponseBytes  = 1 << 20
 )
 
-type clientCredentialsRequest struct {
-	GrantType    string `json:"grant_type"`
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	Scope        string `json:"scope,omitempty"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
-type clientCredentialsResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int64  `json:"expires_in"`
-}
-
 type oauthErrorResponse struct {
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
+	Error string `json:"error"`
 }
 
-// clientCredentialsTokenSource requests tokens with a JSON body, which is what Zendesk documents
-// (golang.org/x/oauth2/clientcredentials sends a form body).
+// clientCredentialsTokenSource caches the token itself, instead of using oauth2.ReuseTokenSource,
+// so bearerTransport can drop a token Zendesk rejects before it expires.
 type clientCredentialsTokenSource struct {
-	httpClient   *http.Client
-	tokenURL     string
-	clientID     string
-	clientSecret string
-	scope        string
+	httpClient *http.Client
+	config     *clientcredentials.Config
 
 	mu    sync.Mutex
 	token *oauth2.Token
@@ -66,11 +48,15 @@ type clientCredentialsTokenSource struct {
 
 func newClientCredentialsTokenSource(httpClient *http.Client, tokenURL, clientID, clientSecret string, scopes []string) *clientCredentialsTokenSource {
 	return &clientCredentialsTokenSource{
-		httpClient:   httpClient,
-		tokenURL:     tokenURL,
-		clientID:     clientID,
-		clientSecret: clientSecret,
-		scope:        strings.Join(scopes, " "),
+		httpClient: httpClient,
+		config: &clientcredentials.Config{
+			ClientID:       clientID,
+			ClientSecret:   clientSecret,
+			TokenURL:       tokenURL,
+			Scopes:         scopes,
+			EndpointParams: url.Values{"expires_in": {strconv.Itoa(oauthTokenLifetimeSeconds)}},
+			AuthStyle:      oauth2.AuthStyleInParams,
+		},
 	}
 }
 
@@ -82,10 +68,12 @@ func (s *clientCredentialsTokenSource) Token(ctx context.Context) (*oauth2.Token
 	if s.token.Valid() {
 		return s.token, nil
 	}
-	token, err := s.fetch(ctx)
+	token, err := s.config.Token(context.WithValue(ctx, oauth2.HTTPClient, s.httpClient))
 	if err != nil {
-		return nil, err
+		// Errors go through the SDK classifier so their gRPC codes match the SDK's own OAuth token sources.
+		return nil, s.withSetupHint(uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: OAuth token request failed: %w", err)))
 	}
+	ctxzap.Extract(ctx).Debug("baton-zendesk: obtained OAuth access token", zap.Time("expiry", token.Expiry))
 	s.token = token
 	return token, nil
 }
@@ -100,78 +88,23 @@ func (s *clientCredentialsTokenSource) Invalidate(rejected *oauth2.Token) {
 	}
 }
 
-func (s *clientCredentialsTokenSource) fetch(ctx context.Context) (*oauth2.Token, error) {
-	payload, err := json.Marshal(clientCredentialsRequest{ //nolint:gosec // Zendesk requires the secret in the token request body.
-		GrantType:    "client_credentials",
-		ClientID:     s.clientID,
-		ClientSecret: s.clientSecret,
-		Scope:        s.scope,
-		ExpiresIn:    oauthTokenLifetimeSeconds,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: encode OAuth token request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.tokenURL, bytes.NewReader(payload))
-	if err != nil {
-		return nil, fmt.Errorf("baton-zendesk: build OAuth token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	// Errors go through the SDK classifier so their gRPC codes match the SDK's own OAuth token sources.
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: OAuth token request failed: %w", err))
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxOAuthResponseBytes))
-	if err != nil {
-		return nil, uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: read OAuth token response: %w", err))
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		err := uhttp.ClassifyOAuth2TokenError(fmt.Errorf("baton-zendesk: OAuth token request rejected: %w",
-			&oauth2.RetrieveError{Response: resp, Body: raw}))
-		return nil, s.withSetupHint(err, raw)
-	}
-
-	var body clientCredentialsResponse
-	if err := json.Unmarshal(raw, &body); err != nil {
-		return nil, fmt.Errorf("baton-zendesk: decode OAuth token response: %w", err)
-	}
-	if body.AccessToken == "" {
-		return nil, errors.New("baton-zendesk: OAuth token response has no access token")
-	}
-
-	token := &oauth2.Token{
-		AccessToken: body.AccessToken,
-		TokenType:   body.TokenType,
-	}
-	if body.ExpiresIn > 0 {
-		token.Expiry = time.Now().Add(time.Duration(body.ExpiresIn) * time.Second)
-	}
-
-	ctxzap.Extract(ctx).Debug("baton-zendesk: obtained OAuth access token", zap.Time("expiry", token.Expiry))
-	return token, nil
-}
-
 // withSetupHint prefixes rejections caused by connector or OAuth client settings with an actionable message,
 // keeping the SDK's gRPC code. Retryable errors are left as-is.
-func (s *clientCredentialsTokenSource) withSetupHint(err error, raw []byte) error {
+func (s *clientCredentialsTokenSource) withSetupHint(err error) error {
 	code := status.Code(err)
 	if code == codes.Unavailable || code == codes.DeadlineExceeded {
 		return err
 	}
-	var body oauthErrorResponse
-	if json.Unmarshal(raw, &body) != nil {
+	var retrieveErr *oauth2.RetrieveError
+	if !errors.As(err, &retrieveErr) {
 		return err
 	}
 
 	var hint string
-	switch body.Error {
+	switch retrieveErr.ErrorCode {
 	case "invalid_scope":
-		hint = fmt.Sprintf("Zendesk rejected the requested OAuth scopes %q; set OAuth Scopes to scopes the Zendesk OAuth client allows", s.scope)
+		hint = fmt.Sprintf("Zendesk rejected the requested OAuth scopes %q; set OAuth Scopes to scopes the Zendesk OAuth client allows",
+			strings.Join(s.config.Scopes, " "))
 	case "invalid_client":
 		hint = "Zendesk rejected the OAuth client; check the client ID and secret, and that the client is confidential and active"
 	case "unauthorized_client":

@@ -16,6 +16,7 @@ func newValidateTestServer(t *testing.T, currentUser string) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/oauth/tokens":
+			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"access_token":"abc","token_type":"bearer","expires_in":7200}`))
 		case "/users/me.json":
 			_, _ = w.Write([]byte(currentUser))
