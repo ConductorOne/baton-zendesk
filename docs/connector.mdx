@@ -93,12 +93,23 @@ Make a note of your subdomain.
 Zendesk records every change C1 makes (such as user, membership, and ticket updates) as made by the admin who **created the OAuth client**, and the connector has the same permissions as that admin. If that admin loses their admin role or is deactivated, the connector stops working. We recommend creating the client from a dedicated admin account that won't be deprovisioned.
 </Note>
 
+The scopes you allow on the OAuth client decide what C1 can do in Zendesk. Choose one of these access levels:
+
+| Access level | Scopes | What C1 can do |
+| :--- | :--- | :--- |
+| Read-only | `read` | Sync users, groups, organizations, and roles for access reviews. Provisioning and external ticketing don't work. |
+| Read and write | `read` and `write` | Everything in read-only, plus provisioning (granting and revoking access, and creating, deleting, enabling, and disabling accounts) and external ticketing. |
+
+<Warning>
+Use the same scopes in the connector's **OAuth Scopes** setting when you configure it below. If the connector asks for scopes the OAuth client doesn't allow, Zendesk rejects the connection.
+</Warning>
+
 <Steps>
 <Step>
-Log in to your Zendesk account at `yoursubdomain.zendesk.com` as an admin, then click the gear icon (⚙️) in the left sidebar and click **Go to Admin Center**.
+Log in to your Zendesk account at `yoursubdomain.zendesk.com` as an admin, then go the **Admin Center** module.
 </Step>
 <Step>
-Navigate to **Apps and integrations** > **APIs** > **OAuth clients** and click **Add OAuth client**.
+On the left sidebar click on **Apps and integrations** > **APIs** > **OAuth clients** and click **Add OAuth client**.
 </Step>
 <Step>
 Enter a **Name** and **Description** (for example, "C1 Integration"), and set **Client kind** to **Confidential**.
@@ -106,7 +117,7 @@ Enter a **Name** and **Description** (for example, "C1 Integration"), and set **
 If the form asks for a redirect URL, enter any HTTPS URL your organization controls. The connector doesn't use it.
 </Step>
 <Step>
-If the form lets you choose which scopes the client can use, allow **read** and **write**. If you only want C1 to review access and never change anything in Zendesk, **read** is enough.
+If the form lets you choose which scopes the client can use, allow **read** for read-only access, or **read** and **write** for read and write access.
 </Step>
 <Step>
 Copy the value in the **Identifier** field. This is your OAuth client ID.
@@ -189,7 +200,7 @@ In the **Subdomain** field, enter the subdomain.
 <Step>
 Choose how the connector authenticates with Zendesk:
 
-- **OAuth client credentials (recommended):** paste the client identifier into the **OAuth Client ID** field and the secret into the **OAuth Client Secret** field. Leave **OAuth Scopes** as `read` and `write`, or set it to only `read` if C1 should never change anything in Zendesk.
+- **OAuth client credentials (recommended):** paste the client identifier into the **OAuth Client ID** field and the secret into the **OAuth Client Secret** field. In **OAuth Scopes**, enter the same scopes you allowed on the OAuth client: `read` for read-only access, or `read` and `write` (the default) for read and write access.
 - **API token (deprecated):** in the **Email** field, enter the email address associated with your System Admin account in Zendesk, then paste the token into the **API Token** field.
 </Step>
 <Step>
@@ -271,7 +282,8 @@ stringData:
   BATON_AUTH_METHOD: oauth-client-credentials
   BATON_OAUTH_CLIENT_ID: <Zendesk OAuth client identifier>
   BATON_OAUTH_CLIENT_SECRET: <Zendesk OAuth client secret>
-  # Optional: defaults to read,write. Use read if C1 should never change anything in Zendesk
+  # Optional: read,write (default) for read and write access, or read for read-only access.
+  # Must match the scopes allowed on the Zendesk OAuth client.
   # BATON_OAUTH_SCOPES: read
 
   # API token (deprecated): remove the OAuth lines above and use these instead
