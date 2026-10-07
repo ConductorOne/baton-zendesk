@@ -8,18 +8,19 @@ import (
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	"github.com/conductorone/baton-sdk/pkg/pagination"
 	sdkTicket "github.com/conductorone/baton-sdk/pkg/types/ticket"
+	"github.com/conductorone/baton-zendesk/pkg/client"
 	"github.com/conductorone/baton-zendesk/pkg/connector"
 )
 
 // TestTicketingEndToEnd drives ListTicketSchemas -> CreateTicket -> GetTicket
 // against the mock server through the real connector + client stack (spec R13).
 func TestTicketingEndToEnd(t *testing.T) {
-	srv := &server{state: NewState()}
+	srv := newServer()
 	ts := httptest.NewServer(recordingMiddleware(srv.state, newMux(srv)))
 	t.Cleanup(ts.Close)
 
 	ctx := context.Background()
-	c, err := connector.New(ctx, nil, "", testEmail, testAPIToken, ts.URL, nil)
+	c, err := connector.New(ctx, nil, "", ts.URL, client.AuthConfig{Email: testEmail, APIToken: testAPIToken}, nil)
 	if err != nil {
 		t.Fatalf("connector.New: %v", err)
 	}

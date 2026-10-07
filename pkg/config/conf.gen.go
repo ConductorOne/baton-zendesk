@@ -4,12 +4,15 @@ package config
 import "reflect"
 
 type Zendesk struct {
-	Subdomain string   `mapstructure:"subdomain"`
-	ApiToken  string   `mapstructure:"api-token"`
-	Email     string   `mapstructure:"email"`
-	Orgs      []string `mapstructure:"orgs"`
-	BaseUrl   string   `mapstructure:"base-url"`
-	Ticketing bool     `mapstructure:"ticketing"`
+	Subdomain         string   `mapstructure:"subdomain"`
+	ApiToken          string   `mapstructure:"api-token"`
+	Email             string   `mapstructure:"email"`
+	OauthClientId     string   `mapstructure:"oauth-client-id"`
+	OauthClientSecret string   `mapstructure:"oauth-client-secret"`
+	OauthScopes       []string `mapstructure:"oauth-scopes"`
+	Orgs              []string `mapstructure:"orgs"`
+	BaseUrl           string   `mapstructure:"base-url"`
+	Ticketing         bool     `mapstructure:"ticketing"`
 }
 
 func (c *Zendesk) findFieldByTag(tagValue string) (any, bool) {

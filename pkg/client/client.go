@@ -9,10 +9,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	v2 "github.com/conductorone/baton-sdk/pb/c1/connector/v2"
 	rs "github.com/conductorone/baton-sdk/pkg/types/resource"
+	"github.com/conductorone/baton-sdk/pkg/uhttp"
+	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
+	"google.golang.org/grpc/codes"
 )
 
 // Without page[size], Zendesk falls back to OBP on dual-mode endpoints and
@@ -29,6 +33,9 @@ const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
 	pathUser = "/users/%d.json"
 
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self
+	pathCurrentUser = "/users/me.json"
+
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#permanently-delete-user
 	pathDeletedUser = "/deleted_users/%d.json"
 
@@ -42,8 +49,32 @@ type ZendeskClient struct {
 	client *zendesk.Client
 }
 
-func New(ctx context.Context, httpClient *http.Client, subdomain string, email string, apiToken string, baseURL string) (*ZendeskClient, error) {
-	zc := &ZendeskClient{}
+// AuthConfig holds the credentials for the selected authentication method.
+type AuthConfig struct {
+	OAuth             bool
+	Email             string
+	APIToken          string
+	OAuthClientID     string
+	OAuthClientSecret string
+	OAuthScopes       []string
+}
+
+func New(ctx context.Context, httpClient *http.Client, subdomain string, baseURL string, auth AuthConfig) (*ZendeskClient, error) {
+	var err error
+	if httpClient == nil {
+		// uhttp's transport gives network failures the same retryable gRPC codes as uhttp.BaseHttpClient.
+		httpClient, err = uhttp.NewClient(ctx, uhttp.WithLogger(true, ctxzap.Extract(ctx)))
+		if err != nil {
+			return nil, err
+		}
+	}
+	if auth.OAuth {
+		httpClient, err = newOAuthHTTPClient(httpClient, subdomain, baseURL, auth)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	client, err := zendesk.NewClient(httpClient)
 	if err != nil {
 		return nil, err
@@ -60,9 +91,55 @@ func New(ctx context.Context, httpClient *http.Client, subdomain string, email s
 			return nil, err
 		}
 	}
-	client.SetCredential(zendesk.NewAPITokenCredential(email, apiToken))
-	zc.client = client
-	return zc, nil
+	// Under OAuth the Bearer header comes from the HTTP client's transport, so no credential is set.
+	if !auth.OAuth {
+		client.SetCredential(zendesk.NewAPITokenCredential(auth.Email, auth.APIToken))
+	}
+	return &ZendeskClient{client: client}, nil
+}
+
+func newOAuthHTTPClient(httpClient *http.Client, subdomain string, baseURL string, auth AuthConfig) (*http.Client, error) {
+	if auth.OAuthClientID == "" || auth.OAuthClientSecret == "" {
+		return nil, uhttp.WrapErrors(codes.InvalidArgument, "baton-zendesk: OAuth client ID and secret are required")
+	}
+	tokenURL, err := oauthTokenURL(subdomain, baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	base := http.DefaultTransport
+	var timeout time.Duration
+	if httpClient != nil {
+		timeout = httpClient.Timeout
+		if httpClient.Transport != nil {
+			base = httpClient.Transport
+		}
+	}
+
+	tokens := newClientCredentialsTokenSource(&http.Client{Transport: base, Timeout: timeout},
+		tokenURL, auth.OAuthClientID, auth.OAuthClientSecret, auth.OAuthScopes)
+	return &http.Client{
+		Transport: &bearerTransport{base: base, tokens: tokens},
+		Timeout:   timeout,
+	}, nil
+}
+
+// GetCurrentUser returns the user the credentials authenticate as.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self
+func (z *ZendeskClient) GetCurrentUser(ctx context.Context) (zendesk.User, error) {
+	body, err := z.client.Get(ctx, pathCurrentUser)
+	if err != nil {
+		return zendesk.User{}, wrapZendeskError(err)
+	}
+
+	var result struct {
+		User zendesk.User `json:"user"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return zendesk.User{}, fmt.Errorf("baton-zendesk: decode current user response: %w", err)
+	}
+	return result.User, nil
 }
 
 // ListUsers returns users with the given role using cursor-based pagination.

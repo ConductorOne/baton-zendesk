@@ -98,7 +98,7 @@ func containsEmptyQueryParam(rawQuery, key string) bool {
 
 func newTestClient(t *testing.T, baseURL string) *ZendeskClient {
 	t.Helper()
-	c, err := New(context.Background(), nil, "", "test@example.com", "token", baseURL)
+	c, err := New(context.Background(), nil, "", baseURL, AuthConfig{Email: "test@example.com", APIToken: "token"})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
