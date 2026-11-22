@@ -33,6 +33,9 @@ const (
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/
 	pathUser = "/users/%d.json"
 
+	// https://developer.zendesk.com/api-reference/ticketing/users/users/#search-users
+	pathSearchUsers = "/users/search.json"
+
 	// https://developer.zendesk.com/api-reference/ticketing/users/users/#show-self
 	pathCurrentUser = "/users/me.json"
 
@@ -492,6 +495,31 @@ func (z *ZendeskClient) CreateUser(ctx context.Context, user zendesk.User) (zend
 		return zendesk.User{}, wrapZendeskError(err)
 	}
 	return created, nil
+}
+
+// SearchUsersByEmail returns the users Zendesk's user search matches for email.
+// The search is not an exact match, so callers must compare emails themselves.
+// complete is false when the results span more than one page.
+//
+// Zendesk API docs: https://developer.zendesk.com/api-reference/ticketing/users/users/#search-users
+func (z *ZendeskClient) SearchUsersByEmail(ctx context.Context, email string) ([]zendesk.User, bool, error) {
+	params := url.Values{}
+	params.Set("query", "email:"+email)
+	params.Set("per_page", strconv.Itoa(cbpPageSize))
+
+	body, err := z.client.Get(ctx, pathSearchUsers+"?"+params.Encode())
+	if err != nil {
+		return nil, false, wrapZendeskError(err)
+	}
+
+	var data struct {
+		Users    []zendesk.User `json:"users"`
+		NextPage *string        `json:"next_page"`
+	}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, false, fmt.Errorf("baton-zendesk: decode user search response: %w", err)
+	}
+	return data.Users, data.NextPage == nil || *data.NextPage == "", nil
 }
 
 // UpdateUser updates a user via direct HTTP PUT request with raw data.

@@ -19,6 +19,8 @@ import (
 	"github.com/grpc-ecosystem/go-grpc-middleware/logging/zap/ctxzap"
 	"github.com/nukosuke/go-zendesk/zendesk"
 	"go.uber.org/zap"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -217,6 +219,9 @@ func (t *teamMemberResourceType) CreateAccount(
 
 	createdUser, err := t.client.CreateUser(ctx, newUser)
 	if err != nil {
+		if newUser.Email != "" && client.IsDuplicateEmailError(err) {
+			return t.existingAccount(ctx, newUser.Email)
+		}
 		return nil, nil, nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -229,6 +234,49 @@ func (t *teamMemberResourceType) CreateAccount(
 		Resource:              userResource,
 		IsCreateAccountResult: true,
 	}, nil, nil, nil
+}
+
+// existingAccount returns the team member that already owns email, without
+// modifying it. It binds only a user that sync emits as a team member.
+func (t *teamMemberResourceType) existingAccount(
+	ctx context.Context,
+	email string,
+) (connectorbuilder.CreateAccountResponse, []*v2.PlaintextData, annotations.Annotations, error) {
+	users, complete, err := t.client.SearchUsersByEmail(ctx, email)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("baton-zendesk: failed to look up existing user after create conflict: %w", err)
+	}
+	if !complete {
+		return nil, nil, nil, status.Error(codes.AlreadyExists, "baton-zendesk: create user conflict: too many users match the requested email")
+	}
+
+	var match *zendesk.User
+	for i := range users {
+		// Only the primary email is compared: sync emits that email, and a
+		// secondary identity match would bind a user under a different login.
+		if !strings.EqualFold(users[i].Email, email) {
+			continue
+		}
+		if match != nil {
+			return nil, nil, nil, status.Error(codes.AlreadyExists, "baton-zendesk: create user conflict: multiple users match the requested email")
+		}
+		match = &users[i]
+	}
+	if match == nil || match.ID == 0 {
+		return nil, nil, nil, status.Error(codes.AlreadyExists, "baton-zendesk: create user conflict: no team member has the requested email")
+	}
+	if !match.Active {
+		return nil, nil, nil, status.Error(codes.AlreadyExists, "baton-zendesk: create user conflict: the user with the requested email is not active")
+	}
+	if role := strings.ToLower(match.Role); role != teamRoleAgent && role != teamRoleAdmin {
+		return nil, nil, nil, status.Error(codes.AlreadyExists, "baton-zendesk: create user conflict: the user with the requested email is not a team member")
+	}
+
+	userResource, err := getTeamResource(match, t.resourceType)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return &v2.CreateAccountResponse_AlreadyExistsResult{Resource: userResource}, nil, nil, nil
 }
 
 func (t *teamMemberResourceType) Delete(ctx context.Context, resourceId *v2.ResourceId) (annotations.Annotations, error) {
