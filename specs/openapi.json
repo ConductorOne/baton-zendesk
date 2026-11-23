@@ -255,6 +255,109 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation failure. Only a `DuplicateValue` error on `details.email` is treated as an existing account; other validation errors are returned unchanged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "examples": [
+                        "RecordInvalid"
+                      ]
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "details": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "error": {
+                              "type": "string",
+                              "examples": [
+                                "DuplicateValue"
+                              ]
+                            },
+                            "description": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "When the email is already in use, Zendesk returns 422 `RecordInvalid` with a `DuplicateValue` entry under `details.email`; the connector then looks up the existing user with `searchUsers`."
+      }
+    },
+    "/users/search.json": {
+      "get": {
+        "operationId": "searchUsers",
+        "tags": [
+          "users"
+        ],
+        "summary": "Search users by email",
+        "description": "Called by CreateAccount after a duplicate-email 422 to find the existing user. Matching is not exact, so the connector compares primary emails itself and reads only the first page; a non-null `next_page` is treated as ambiguous.",
+        "externalDocs": {
+          "url": "https://developer.zendesk.com/api-reference/ticketing/users/users/#search-users"
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "description": "Always `email:<requested email>`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "The connector always sends 100.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching users.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "next_page": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "count": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

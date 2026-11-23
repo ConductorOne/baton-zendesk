@@ -23,6 +23,8 @@ If you're setting up Zendesk with C1 for the first time, you're in the right pla
 
 The Zendesk connector supports [automatic account provisioning and deprovisioning](/product/admin/account-provisioning).
 
+If Zendesk reports that the email is already used by another user, the connector returns that existing agent or admin instead of failing. It does not change the existing user's role, suspension or other attributes. If no single active agent or admin has that primary email, account creation fails with an "already exists" error.
+
 <Note>
 **Role provisioning scope.** Granting and revoking custom roles (Enterprise plan) is fully supported and switches a user between Zendesk custom roles. Revoke clears the user's custom role and reverts them to the base agent role. The built-in `agent` and `admin` role entitlements cannot be revoked directly — to downgrade a user, assign them a lower role instead.
 </Note>
